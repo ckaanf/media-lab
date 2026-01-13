@@ -1,0 +1,16 @@
+# ... existing code ...
+/httpRequests/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Gradle
+.gradle/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+# ... existing code ...
