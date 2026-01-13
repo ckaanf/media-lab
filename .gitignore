@@ -13,4 +13,9 @@ build/
 # OS
 .DS_Store
 Thumbs.db
-# ... existing code ...
+
+# Media Files
+videos/
+*.mp4
+*.mkv
+
