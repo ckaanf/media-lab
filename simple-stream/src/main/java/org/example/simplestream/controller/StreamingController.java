@@ -1,6 +1,7 @@
 package org.example.simplestream.controller;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.simplestream.service.StreamingService;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
@@ -11,6 +12,7 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/api/v1/stream")
 @RequiredArgsConstructor
+@Slf4j
 public class StreamingController {
     private final StreamingService streamingService;
 
@@ -22,6 +24,15 @@ public class StreamingController {
         return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                 .contentType(MediaTypeFactory.getMediaType(fileName).orElse(MediaType.APPLICATION_OCTET_STREAM))
                 .body(region);
+    }
+
+    @GetMapping("/v/block")
+    public String blockingTest() throws InterruptedException {
+        log.info("Blocking Request Started: " + Thread.currentThread().getName());
+        Thread.sleep(10000);
+
+        log.info("Blocking Request Finished: " + Thread.currentThread().getName());
+        return "ok";
     }
 
 
