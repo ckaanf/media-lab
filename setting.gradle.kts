@@ -1,2 +1,2 @@
 rootProject.name = "media-lab"
-include("simple-stream")
+include("simple-spring-stream")
