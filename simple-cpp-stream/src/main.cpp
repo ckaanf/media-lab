@@ -52,5 +52,8 @@ int main() {
     HttpServer app(8081);
     app.start();
 
+    cleanupWorkers();
+
     return 0;
+}
 }
