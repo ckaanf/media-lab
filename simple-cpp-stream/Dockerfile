@@ -1,27 +1,38 @@
-# 1. 빌드 환경 (GCC 최신 버전)
-FROM gcc:latest AS builder
+# 1. 빌드 단계 (Builder Stage)
+FROM ubuntu:22.04 AS builder
+
+# 필수 패키지 설치 (C++, CMake, Make)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 소스 코드 복사
-COPY main.cpp .
+# [중요] 소스 코드와 CMake 설정 파일 복사
+# 이제 파일이 여러 개이므로 폴더째로 복사합니다.
+COPY CMakeLists.txt .
+COPY src ./src
 
-# 컴파일 (최적화 옵션 포함)
-RUN g++ -O3 -pthread main.cpp -o server
+# CMake로 빌드 시스템 생성 및 컴파일
+RUN cmake . && make
 
-# 2. 실행 환경 (가벼운 Ubuntu/Debian)
-FROM ubuntu:latest
+# ---------------------------------------------------
+
+# 2. 실행 단계 (Runtime Stage) - 가볍게 유지
+FROM ubuntu:22.04
 
 WORKDIR /app
 
-# 빌드된 실행 파일만 가져오기
+# 빌드 단계에서 만든 실행 파일('server')만 가져오기
 COPY --from=builder /app/server .
 
-# 영상 폴더 생성 (볼륨 마운트 포인트)
+# 영상 저장소 폴더 생성
 RUN mkdir -p videos
 
-# 포트 개방
+# 포트 노출
 EXPOSE 8081
 
-# 실행 (Videos 폴더는 외부에서 마운트할 예정)
+# 실행
 CMD ["./server"]

@@ -17,3 +17,22 @@ docker run -d \
 media-server-cpp
 
 ```
+
+```plaintext
+simple-cpp-stream/
+├── CMakeLists.txt         # [1] 빌드 설정
+├── videos/                # 영상 폴더
+│   └── test.mp4
+└── src/
+    ├── main.cpp           # [2] 메인 (프로세스 관리 & 시그널)
+    ├── core/
+    │   ├── StreamContext.hpp     # [3] 상태 저장용 구조체
+    │   ├── MediaController.hpp   # [4] 비즈니스 로직 (헤더)
+    │   └── MediaController.cpp   # [5] 비즈니스 로직 (구현)
+    ├── http/
+    │   ├── HttpRequest.hpp       # [6] HTTP 파싱 (헤더)
+    │   └── HttpRequest.cpp       # [7] HTTP 파싱 (구현)
+    └── server/
+        ├── HttpServer.hpp        # [8] 서버 엔진 (헤더)
+        └── HttpServer.cpp        # [9] 서버 엔진 (구현)
+```
