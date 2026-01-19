@@ -1,21 +1,48 @@
-# ... existing code ...
-/httpRequests/
-
-# IntelliJ IDEA
+# IDEs
 .idea/
 *.iml
+*.iws
+*.ipr
 out/
+.vscode/
 
-# Gradle
+# Gradle & Build
 .gradle/
 build/
+bin/
+obj/
+
+# C++ Build Artifacts (CMake)
+# 개별 파일을 적지 않고 폴더와 확장자 패턴으로 관리합니다.
+**/CMakeFiles/
+**/cmake-build-debug/
+**/cmake-build-release/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.d
+*.a
+*.lib
+*.so
+*.dll
+*.exe
+
+# 프로젝트 전용 실행 파일 (simple-cpp-stream 내의 server 등)
+/simple-cpp-stream/server
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Media Files
+# Media Files (대용량 파일 제외)
 videos/
 *.mp4
 *.mkv
+*.avi
+*.mov
 
+# Others
+/httpRequests/
+*.log
