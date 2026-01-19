@@ -1,5 +1,7 @@
 #include "HttpServer.hpp"
 #include <iostream>
+#include <cstring>
+#include <cerrno>
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
@@ -15,12 +17,12 @@
 void setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
-
     }
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-HttpServer::HttpServer(int port) : port(port) {}
+HttpServer::HttpServer(int port) : port(port) {
+}
 
 void HttpServer::start() {
     setupSocket();
@@ -37,22 +39,45 @@ void HttpServer::setupSocket() {
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
     sockaddr_in address{};
-    address.sin_family = AF_INET; address.sin_addr.s_addr = INADDR_ANY; address.sin_port = htons(port);
-    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) exit(1);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+    if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) exit(1);
     setNonBlocking(server_fd);
     listen(server_fd, SOMAXCONN);
 }
 
 void HttpServer::setupEpoll() {
     epoll_fd = epoll_create1(0);
-    struct epoll_event event{}; event.events = EPOLLIN | EPOLLET; event.data.fd = server_fd;
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event);
+    if (epoll_fd < 0) {
+        std::cerr << "epoll_create1 failed: " << strerror(errno) << std::endl;
+        exit(1);
+    }
+    struct epoll_event event{};
+    event.events = EPOLLIN | EPOLLET;
+    event.data.fd = server_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) < 0) {
+        std::cerr << "epoll_ctl failed: " << strerror(errno) << std::endl;
+        exit(1);
+    }
 }
 
 void HttpServer::eventLoop() {
     std::vector<struct epoll_event> events(MAX_EVENTS);
-    while (true) {
-        int n = epoll_wait(epoll_fd, events.data(), MAX_EVENTS, -1);
+    while (running) {
+        // 타임아웃을 1000ms로 설정하여 주기적으로 running 상태를 확인하거나 시그널 감지
+        int n = epoll_wait(epoll_fd, events.data(), MAX_EVENTS, 1000);
+
+        if (n < 0) {
+            if (errno == EINTR) {
+                // 시그널(SIGTERM/SIGINT)을 받으면 루프 종료
+                running = false;
+                break;
+            }
+            std::cerr << "epoll_wait error: " << strerror(errno) << std::endl;
+            break;
+        }
+
         for (int i = 0; i < n; i++) {
             int fd = events[i].data.fd;
             uint32_t ev = events[i].events;
@@ -73,27 +98,44 @@ void HttpServer::eventLoop() {
 
 void HttpServer::handleConnect() {
     while (true) {
-        sockaddr_in client_addr; socklen_t len = sizeof(client_addr);
-        int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &len);
+        sockaddr_in client_addr;
+        socklen_t len = sizeof(client_addr);
+        int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &len);
         if (client_fd < 0) break;
         setNonBlocking(client_fd);
-        struct epoll_event event{}; event.events = EPOLLIN | EPOLLET; event.data.fd = client_fd;
-        epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event);
+        struct epoll_event event{};
+        event.events = EPOLLIN | EPOLLET;
+        event.data.fd = client_fd;
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event) < 0) {
+            std::cerr << "epoll_ctl ADD failed: " << strerror(errno) << std::endl;
+            close(client_fd);
+            continue;
+        }
         request_buffers[client_fd] = "";
     }
 }
 
 void HttpServer::handleRequest(int fd) {
-    char buffer[4096]; bool closed = false;
+    char buffer[4096];
+    bool closed = false;
     while (true) {
         int valread = read(fd, buffer, sizeof(buffer));
-        if (valread < 0) { if (errno == EAGAIN) break; closed = true; break; }
-        else if (valread == 0) { closed = true; break; }
+        if (valread < 0) {
+            if (errno == EAGAIN) break;
+            closed = true;
+            break;
+        } else if (valread == 0) {
+            closed = true;
+            break;
+        }
         request_buffers[fd].append(buffer, valread);
     }
-    if (closed) { cleanUp(fd); return; }
+    if (closed) {
+        cleanUp(fd);
+        return;
+    }
 
-    std::string& req_data = request_buffers[fd];
+    std::string &req_data = request_buffers[fd];
     size_t header_end;
     while ((header_end = req_data.find("\r\n\r\n")) != std::string::npos) {
         std::string raw_req = req_data.substr(0, header_end + 4);
@@ -102,10 +144,17 @@ void HttpServer::handleRequest(int fd) {
         std::string prefix = "/api/v2/stream/v/";
         if (req.path.find(prefix) == 0) {
             std::string fileName = req.path.substr(prefix.length());
-            size_t pos = 0; while ((pos = fileName.find("%20", pos)) != std::string::npos) { fileName.replace(pos, 3, " "); pos += 1; }
+            size_t pos = 0;
+            while ((pos = fileName.find("%20", pos)) != std::string::npos) {
+                fileName.replace(pos, 3, " ");
+                pos += 1;
+            }
             if (!fileName.empty()) {
                 StreamContext ctx = controller.startStream(fd, req, fileName, epoll_fd);
-                if (ctx.active) { stream_contexts[fd] = ctx; break; }
+                if (ctx.active) {
+                    stream_contexts[fd] = ctx;
+                    break;
+                }
             } else cleanUp(fd);
         } else cleanUp(fd);
     }
@@ -113,6 +162,8 @@ void HttpServer::handleRequest(int fd) {
 
 void HttpServer::cleanUp(int fd) {
     if (stream_contexts.count(fd) && stream_contexts[fd].active) close(stream_contexts[fd].file_fd);
-    stream_contexts.erase(fd); request_buffers.erase(fd);
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr); close(fd);
+    stream_contexts.erase(fd);
+    request_buffers.erase(fd);
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+    close(fd);
 }

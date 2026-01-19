@@ -19,7 +19,7 @@ StreamContext MediaController::startStream(int client_fd, HttpRequest& req, std:
 
     struct stat file_stat;
     if (fstat(file_fd, &file_stat) < 0) {
-        close(file_fd)
+        close(file_fd);
         sendError(client_fd, 500, "Internal Server Error");
         return ctx;
     }
@@ -27,23 +27,29 @@ StreamContext MediaController::startStream(int client_fd, HttpRequest& req, std:
     long range_start = 0, range_end = file_size - 1, content_length = file_size;
     int status_code = 200;
 
-    std::string range_header = req.getHeader("range");
-    if (!range_header.empty()) {
-        size_t eq_pos = range_header.find('=');
-        size_t dash_pos = range_header.find('-');
-        if (eq_pos != std::string::npos && dash_pos != std::string::npos) {
-            try {
-                range_start = std::stol(range_header.substr(eq_pos + 1, dash_pos - (eq_pos + 1)));
-                std::string end_str = range_header.substr(dash_pos + 1);
-                if (!end_str.empty()) range_end = std::stol(end_str);
+        std::string range_header = req.getHeader("range");
+        if (!range_header.empty()) {
+            size_t eq_pos = range_header.find('=');
+            size_t dash_pos = range_header.find('-');
+            if (eq_pos != std::string::npos && dash_pos != std::string::npos) {
+                try {
+                    range_start = std::stol(range_header.substr(eq_pos + 1, dash_pos - (eq_pos + 1)));
+                    std::string end_str = range_header.substr(dash_pos + 1);
+                    if (!end_str.empty()) range_end = std::stol(end_str);
 
-                if (range_end >= file_size) range_end = file_size - 1;
-                if (range_start >= file_size) { close(file_fd); sendError(client_fd, 416, "Range Not Satisfiable"); return ctx; }
+                    if (range_start < 0 || range_end < 0 || range_end < range_start) {
+                        close(file_fd);
+                        sendError(client_fd, 416, "Range Not Satisfiable");
+                        return ctx;
+                    }
 
-                status_code = 206; content_length = range_end - range_start + 1;
-            } catch(...) { range_start = 0; range_end = file_size - 1; content_length = file_size; status_code = 200; }
+                    if (range_end >= file_size) range_end = file_size - 1;
+                    if (range_start >= file_size) { close(file_fd); sendError(client_fd, 416, "Range Not Satisfiable"); return ctx; }
+
+                    status_code = 206; content_length = range_end - range_start + 1;
+                } catch(...) { range_start = 0; range_end = file_size - 1; content_length = file_size; status_code = 200; }
+            }
         }
-    }
 
     std::string header; header.reserve(512);
     header += "HTTP/1.1 " + std::to_string(status_code) + " " + (status_code == 206 ? "Partial Content" : "OK") + "\r\n";

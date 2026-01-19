@@ -13,6 +13,7 @@ private:
     int port;
     int server_fd = -1;
     int epoll_fd = -1;
+    bool running = true;
     MediaController controller;
     std::map<int, std::string> request_buffers;
     std::map<int, StreamContext> stream_contexts;
