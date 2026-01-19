@@ -6,8 +6,12 @@ HttpRequest::HttpRequest(const std::string& raw) {
 }
 
 std::string HttpRequest::getHeader(const std::string& key) {
-    if (headers.count(key)) return headers[key];
-    return "";
+        std::string normalized = key;
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        auto it = headers.find(normalized);
+        if (it != headers.end()) return it->second;
+        return "";
 }
 
 std::string HttpRequest::trim(const std::string& str) {
@@ -19,6 +23,9 @@ std::string HttpRequest::trim(const std::string& str) {
 }
 
 void HttpRequest::parse(const std::string& raw) {
+    method.clear();
+    path.clear();
+    headers.clear();
     size_t pos = 0;
     size_t line_end = raw.find('\n', pos);
     if (line_end != std::string::npos) {

@@ -6,7 +6,9 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,7 +39,7 @@ public class StreamingService {
 
         Resource resource = new FileSystemResource(destination);
         if (!resource.exists()) {
-            throw new RuntimeException("Video not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
 
         long contentLength = resource.contentLength();
@@ -49,14 +51,17 @@ public class StreamingService {
             long start = httpRange.getRangeStart(contentLength);
             long end = httpRange.getRangeEnd(contentLength);
 
-            long rangeLength = Long.min(1024 * 1024, end - start + 1);
+            if (start >= contentLength || start > end) {
+                throw new ResponseStatusException(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
+            }
+
+            long rangeLength = end - start + 1;
 
             log.info("Range request: start={}, length={}, total={}", start, rangeLength, contentLength);
             return new ResourceRegion(resource, start, rangeLength);
         } else {
-            long rangeLength = Long.min(1024 * 1024, contentLength);
-            log.info("Full content request (sending first chunk): length={}", rangeLength);
-            return new ResourceRegion(resource, 0, rangeLength);
+            log.info("Full content request: length={}", contentLength);
+            return new ResourceRegion(resource, 0, contentLength);
         }
     }
 

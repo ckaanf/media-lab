@@ -17,7 +17,12 @@ StreamContext MediaController::startStream(int client_fd, HttpRequest& req, std:
     int file_fd = open(file_path.c_str(), O_RDONLY);
     if (file_fd < 0) { sendError(client_fd, 404, "File Not Found"); return ctx; }
 
-    struct stat file_stat; fstat(file_fd, &file_stat);
+    struct stat file_stat;
+    if (fstat(file_fd, &file_stat) < 0) {
+        close(file_fd)
+        sendError(client_fd, 500, "Internal Server Error");
+        return ctx;
+    }
     long file_size = file_stat.st_size;
     long range_start = 0, range_end = file_size - 1, content_length = file_size;
     int status_code = 200;

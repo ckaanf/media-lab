@@ -14,6 +14,9 @@
 // 유틸리티 함수 (내부 사용)
 void setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+
+    }
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
