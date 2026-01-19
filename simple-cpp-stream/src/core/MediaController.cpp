@@ -37,6 +37,12 @@ StreamContext MediaController::startStream(int client_fd, HttpRequest& req, std:
                     std::string end_str = range_header.substr(dash_pos + 1);
                     if (!end_str.empty()) range_end = std::stol(end_str);
 
+                    if (range_start < 0 || range_end < 0 || range_end < range_start) {
+                        close(file_fd);
+                        sendError(client_fd, 416, "Range Not Satisfiable");
+                        return ctx;
+                    }
+
                     if (range_end >= file_size) range_end = file_size - 1;
                     if (range_start >= file_size) { close(file_fd); sendError(client_fd, 416, "Range Not Satisfiable"); return ctx; }
 
