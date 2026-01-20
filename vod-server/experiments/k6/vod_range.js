@@ -3,8 +3,10 @@ import {check, sleep} from 'k6';
 import {randomIntBetween} from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 
 export const options = {
-    vus: 100,
-    duration: '30s',
+    stages: [
+        { duration: '10s', target: __ENV.VUS },
+        { duration: '20s', target: __ENV.VUS },
+    ],
 };
 
 const FILE = 'sample.mp4';
