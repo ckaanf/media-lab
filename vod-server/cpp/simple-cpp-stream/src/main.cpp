@@ -1,0 +1,69 @@
+#include <iostream>
+#include <vector>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <thread>
+#include <csignal>
+#include <atomic>
+#include <cstring>
+#include <cerrno>
+#include "server/HttpServer.hpp"
+
+std::atomic<bool> shutdown_requested(false);
+std::vector<pid_t> worker_pids;
+
+void signalHandler(int signum) {
+    shutdown_requested.store(true);
+}
+
+void cleanupWorkers() {
+    std::cout << "\n🛑 [Master] Shutting down... Killing workers..." << std::endl;
+    for (pid_t pid : worker_pids) {
+        kill(pid, SIGTERM);
+    }
+
+    // 좀비 프로세스 방지를 위해 종료된 자식들을 수거합니다.
+    for (pid_t pid : worker_pids) {
+        int status;
+        // WNOHANG을 쓰지 않고 확실히 종료될 때까지 기다립니다.
+        // 이미 종료된 경우 즉시 반환됩니다.
+        waitpid(pid, &status, 0);
+    }
+    std::cout << "✅ [Master] All workers stopped. Bye!" << std::endl;
+}
+
+int main() {
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
+    int total_cores = std::thread::hardware_concurrency();
+    if (total_cores == 0) total_cores = 4;
+
+    int num_workers = (total_cores > 2) ? (total_cores - 2) : 1;
+
+    std::cout << "🔥 [Master] Forking " << num_workers << " workers..." << std::endl;
+
+    for (int i = 0; i < num_workers; i++) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            std::cerr << "fork() failed: " << strerror(errno) << std::endl;
+            continue;
+        }
+        if (pid == 0) {
+            HttpServer app(8080);
+            app.start();
+            return 0;
+        } else {
+            worker_pids.push_back(pid);
+        }
+    }
+
+    // 마스터 프로세스는 여기서 시그널이 올 때까지 대기합니다.
+    while (!shutdown_requested.load()) {
+        pause();
+    }
+
+    cleanupWorkers();
+
+    return 0;
+}
