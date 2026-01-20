@@ -1,6 +1,6 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+import {check, sleep} from 'k6';
+import {randomIntBetween} from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 
 export const options = {
     vus: 100,
@@ -8,7 +8,9 @@ export const options = {
 };
 
 const FILE = 'sample.mp4';
-const CHUNK = 256 * 1024;
+const CHUNK = __ENV.CHUNK_SIZE
+    ? parseInt(__ENV.CHUNK_SIZE)
+    : 256 * 1024;
 
 export default function () {
     const start = randomIntBetween(0, 10_000_000);
