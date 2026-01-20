@@ -7,7 +7,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 
-#define VIDEO_DIR "videos/"
+#define VIDEO_DIR "/home/ckaanf/media-lab/videos/"
 
 StreamContext MediaController::startStream(int client_fd, HttpRequest& req, std::string fileName, int epoll_fd) {
     StreamContext ctx;

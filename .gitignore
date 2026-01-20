@@ -30,7 +30,7 @@ Makefile
 *.exe
 
 # 프로젝트 전용 실행 파일 (simple-cpp-stream 내의 server 등)
-/simple-cpp-stream/server
+/vod-server/cpp/simple-cpp-stream/server
 
 # OS
 .DS_Store

@@ -141,7 +141,7 @@ void HttpServer::handleRequest(int fd) {
         std::string raw_req = req_data.substr(0, header_end + 4);
         req_data.erase(0, header_end + 4);
         HttpRequest req(raw_req);
-        std::string prefix = "/api/v2/stream/v/";
+        std::string prefix = "/api/v1/stream/v/";
         if (req.path.find(prefix) == 0) {
             std::string fileName = req.path.substr(prefix.length());
             size_t pos = 0;

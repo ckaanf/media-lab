@@ -32,7 +32,7 @@ COPY --from=builder /app/server .
 RUN mkdir -p videos
 
 # 포트 노출
-EXPOSE 8081
+EXPOSE 8080
 
 # 실행
 CMD ["./server"]
