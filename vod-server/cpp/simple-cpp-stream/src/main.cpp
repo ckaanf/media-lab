@@ -7,6 +7,8 @@
 #include <atomic>
 #include <cstring>
 #include <cerrno>
+
+#include "util/Logger.hpp"
 #include "server/HttpServer.hpp"
 
 std::atomic<bool> shutdown_requested(false);
@@ -17,36 +19,37 @@ void signalHandler(int signum) {
 }
 
 void cleanupWorkers() {
-    std::cout << "\n🛑 [Master] Shutting down... Killing workers..." << std::endl;
+    LOG_INFO("🛑 [Master] Shutting down... Killing workers...");
+
     for (pid_t pid : worker_pids) {
         kill(pid, SIGTERM);
     }
 
-    // 좀비 프로세스 방지를 위해 종료된 자식들을 수거합니다.
     for (pid_t pid : worker_pids) {
         int status;
-        // WNOHANG을 쓰지 않고 확실히 종료될 때까지 기다립니다.
-        // 이미 종료된 경우 즉시 반환됩니다.
         waitpid(pid, &status, 0);
     }
-    std::cout << "✅ [Master] All workers stopped. Bye!" << std::endl;
+    LOG_INFO("✅ [Master] All workers stopped. Bye!");
 }
 
 int main() {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
 
+    LOG_INFO("🚀 Media Server Master Process Started");
+
     int total_cores = std::thread::hardware_concurrency();
     if (total_cores == 0) total_cores = 4;
 
     int num_workers = (total_cores > 2) ? (total_cores - 2) : 1;
 
-    std::cout << "🔥 [Master] Forking " << num_workers << " workers..." << std::endl;
+    // [변경] std::cout -> LOG_INFO (가변 인자 사용)
+    LOG_INFO("🔥 [Master] Forking ", num_workers, " workers...");
 
     for (int i = 0; i < num_workers; i++) {
         pid_t pid = fork();
         if (pid < 0) {
-            std::cerr << "fork() failed: " << strerror(errno) << std::endl;
+            LOG_ERROR("fork() failed: ", strerror(errno));
             continue;
         }
         if (pid == 0) {
@@ -58,7 +61,6 @@ int main() {
         }
     }
 
-    // 마스터 프로세스는 여기서 시그널이 올 때까지 대기합니다.
     while (!shutdown_requested.load()) {
         pause();
     }
