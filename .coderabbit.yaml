@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+version: "2"
+language: "ko-KR"
+
+reviews:
+  profile: "chill"
+  collapse_walkthrough: true 
+  
+  auto_review:
+    ignore_title_keywords:
+      - skip
+    labels:
+      - rabbit
+    base_branches:
+      - "main"
+      - "master"
+      - "dev"
+      - "feature/.*"
+
+events:
+  pull_request:
+  
+    sequence_diagrams:
+      enabled: false
+    poem:
+      enabled: false
+    
+    summary:
+      enabled: true
+      instructions: "기술적인 디테일보다는 '왜 수정했는지', '어떤 영향이 있는지' 위주로 3~5줄 내외의 한국어로 아주 간결하게 요약해줘."
+
+    walkthrough:
+      enabled: false 
+
+code_generation:
+  docstrings:
+    language: "ko-KR"
