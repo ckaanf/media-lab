@@ -9,6 +9,7 @@ set(SOURCES
         src/http/HttpRequest.cpp
         src/core/MediaController.cpp
         src/server/HttpServer.cpp
+        src/util/Logger.hpp
 )
 
 # 실행 파일 생성
