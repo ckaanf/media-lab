@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # 1. 라이브 수신부 (Data Plane)
+  rtmp-server:
+    image: tiangolo/nginx-rtmp
+    container_name: rtmp-server
+    ports:
+      - "1935:1935"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    restart: always
+
+  # 2. 커스텀 미디어 서버 (Java + FFmpeg 실험실)
+  media-server:
+    build:
+      context: ../         # 루트 디렉토리의 Dockerfile을 찾아서 빌드합니다.
+      dockerfile: Dockerfile
+    container_name: media-server-1
+    volumes:
+      - ../videos:/app/videos  # 루트에 있는 videos 폴더를 컨테이너 안으로 뚫어줍니다.
+    tty: true              # 컨테이너가 바로 꺼지지 않게 유지
+    depends_on:
+      - rtmp-server        # RTMP 서버가 먼저 켜진 후 실행되도록 보장
