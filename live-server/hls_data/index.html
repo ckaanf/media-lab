@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Media-Lab Live</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0d0d0e;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #18181b;
+            padding: 15px 20px;
+            border-bottom: 1px solid #2d2d30;
+            font-weight: bold;
+            color: #00ffa3;
+        }
+
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .video-container {
+            flex: 3;
+            background: black;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            max-height: 100%;
+        }
+
+        .chat-container {
+            flex: 1;
+            background: #18181b;
+            border-left: 1px solid #2d2d30;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px;
+            border-bottom: 1px solid #2d2d30;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            color: #adadb8;
+            overflow-y: auto;
+        }
+
+        .chat-input {
+            padding: 15px;
+            border-top: 1px solid #2d2d30;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            background: #2d2d30;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: #ff0000;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <header>MEDIA LAB LIVE</header>
+    <main>
+        <div class="video-container">
+            <div class="status">LIVE</div>
+            <video id="video" controls autoplay muted></video>
+        </div>
+        <div class="chat-container">
+            <div class="chat-header">실시간 채팅</div>
+            <div class="chat-messages">
+                <p><b style="color: #00ffa3;">시스템:</b> 진수님의 미디어 서버에 연결되었습니다.</p>
+                <p><b style="color: #5d5dff;">익명1:</b> 오 진짜 나오네요!</p>
+                <p><b style="color: #ff5d5d;">익명2:</b> 화질 대박입니다 ㄷㄷ</p>
+            </div>
+            <div class="chat-input">
+                <input type="text" placeholder="채팅에 참여해보세요">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        var video = document.getElementById('video');
+        var videoSrc = 'http://localhost:8080/hls/index.m3u8';
+
+        var hls = new Hls({
+            debug: true, // [추가] 콘솔창에 왜 미친듯이 요청하는지 이유가 다 뜹니다!
+            manifestLoadingRetryDelay: 5000,
+            manifestLoadingMaxRetry: 5
+        });
+
+        hls.loadSource('http://localhost:8080/hls/index.m3u8');
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.ERROR, function (event, data) {
+            console.error("진수님, 여기 에러 이유가 뜹니다 ->", data.details);
+        });
+    </script>
+</body>
+
+</html>

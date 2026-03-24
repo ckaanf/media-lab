@@ -10,7 +10,7 @@ services:
       - "8080:8080"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./hls_data:/tmp/hls          # [추가] 공유 바구니 (서빙용)
+      - ./hls_data:/tmp/hls          # 공유 바구니 (서빙용)
     restart: always
 
   media-server:
@@ -20,7 +20,20 @@ services:
     container_name: media-server-1
     volumes:
       - ../videos:/app/videos
-      - ./hls_data:/tmp/hls          # [추가] 공유 바구니 (인코딩 파일 저장용)
+      - ./hls_data:/tmp/hls          # 공유 바구니 (인코딩 파일 저장용)
     tty: true
     depends_on:
       - rtmp-server
+      # [추가] 인텔 내장 그래픽(Quick Sync)을 컨테이너 안으로 패스스루!
+    devices:
+      - /dev/dri:/dev/dri
+    # [추가] 컨테이너에 NVIDIA GPU를 할당하는 마법의 블록
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+    
