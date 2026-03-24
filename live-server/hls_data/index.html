@@ -117,7 +117,7 @@
 
     <script>
         var video = document.getElementById('video');
-        var videoSrc = 'http://localhost:8080/hls/index.m3u8';
+        var videoSrc = 'http://localhost:8080/hls/master.m3u8';
 
         var hls = new Hls({
             debug: true, // [추가] 콘솔창에 왜 미친듯이 요청하는지 이유가 다 뜹니다!
@@ -125,7 +125,7 @@
             manifestLoadingMaxRetry: 5
         });
 
-        hls.loadSource('http://localhost:8080/hls/index.m3u8');
+        hls.loadSource('http://localhost:8080/hls/master.m3u8');
         hls.attachMedia(video);
 
         hls.on(Hls.Events.ERROR, function (event, data) {
