@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # 1. API 및 미디어 제어 서버 (Java + FFmpeg)
+  control-plane:
+    build:
+      context: ./control-plane
+      dockerfile: Dockerfile
+    container_name: control-plane
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./videos:/app/videos       # 원본 영상 읽기
+      - ./hls_data:/tmp/hls        # HLS 파일 쓰기
+    devices:
+      - /dev/dri:/dev/dri          # 하드웨어 가속 패스스루
+    restart: always
+
+  # 2. 서빙 서버 (NGINX)
+  rtmp-server:
+    image: tiangolo/nginx-rtmp
+    container_name: rtmp-server
+    ports:
+      - "1935:1935"
+      - "8080:8080"
+    volumes:
+      - ./live-server/nginx.conf:/etc/nginx/nginx.conf # 설정 파일 위치 주의
+      - ./hls_data:/tmp/hls        # 생성된 파일 읽어서 서빙
+    restart: always
