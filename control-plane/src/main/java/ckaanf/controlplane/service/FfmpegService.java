@@ -109,13 +109,14 @@ public class FfmpegService {
     }
 
     public void stopStreaming() {
-        log.info("이미 종료된 방송입니다");
         if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
             stopRequested.set(true);
             streamingStatus.set(StreamingStatus.STOPPED);
             lastStopReason.set(StopReason.USER_STOP);
             ffmpegProcess.destroy();
             log.info("사용자 요청으로 방송 중지");
+        } else {
+            log.info("이미 종료된 방송입니다");
         }
     }
 
@@ -156,14 +157,18 @@ public class FfmpegService {
 
                     if (matcher.find()) {
                         String speedStr = matcher.group(1);
-                        double speed = Double.parseDouble(speedStr);
 
-                        currentEncodingSpeed.set(speed);
 
                         // 4. 부하 감지 (1.0 미만으로 떨어지면 경고)
-                        if (speed < 1.0) {
-                            log.warn("인코딩 부하 감지! 현재 속도: {}x", speed);
-                            // TODO: 여기서 이벤트를 발행하거나 화질 낮추기 로직을 호출할 수 있습니다.
+                        try {
+                            double speed = Double.parseDouble(speedStr);
+                            currentEncodingSpeed.set(speed);
+                            if (speed < 1.0) {
+                                log.warn("인코딩 부하 감지! 현재 속도: {}x", speed);
+                                // TODO: 여기서 이벤트를 발행하거나 화질 낮추기 로직을 호출할 수 있습니다.
+                            }
+                        } catch (NumberFormatException e) {
+                            log.error("인코딩 속도 파싱 실패: {}", speedStr, e);
                         }
                     }
                 }
