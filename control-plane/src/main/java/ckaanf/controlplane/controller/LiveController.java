@@ -1,5 +1,6 @@
 package ckaanf.controlplane.controller;
 
+import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
 import ckaanf.controlplane.service.FfmpegService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,14 +16,19 @@ public class LiveController {
     private final FfmpegService ffmpegService;
 
     @GetMapping("/start")
-    public String start(@RequestParam(defaultValue = "sample.mp4") String fileName) {
+    public StreamingInfo start(@RequestParam(defaultValue = "sample.mp4") String fileName) {
         ffmpegService.startStreaming(fileName);
-        return "방송 송출 명령이 전달되었습니다: " + fileName;
+        return ffmpegService.getStreamingInfo();
     }
 
     @GetMapping("/stop")
-    public String stop() {
+    public StreamingInfo stop() {
         ffmpegService.stopStreaming();
-        return "방송 중지 명령이 전달되었습니다";
+        return ffmpegService.getStreamingInfo();
+    }
+
+    @GetMapping("/status")
+    public StreamingInfo status() {
+        return ffmpegService.getStreamingInfo();
     }
 }

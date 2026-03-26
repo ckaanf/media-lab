@@ -1,6 +1,8 @@
 package ckaanf.controlplane.service;
 
+import ckaanf.controlplane.domain.Streaming.StopReason;
 import ckaanf.controlplane.domain.Streaming.StreamingStatus;
+import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,14 +12,23 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 public class FfmpegService {
+    private static final Pattern SPEED_PATTERN = Pattern.compile("speed=\\s*([0-9.]+)x");
+    private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(1.0);
+
     private Process ffmpegProcess;
     private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.IDLE);
+    private final AtomicReference<StopReason> lastStopReason = new AtomicReference<>(StopReason.NONE);
+    private final AtomicReference<Boolean> stopRequested = new AtomicReference<>(false);
+
 
     public synchronized void startStreaming(String fileName) {
         if (streamingStatus.get() == StreamingStatus.STREAMING) {
@@ -25,6 +36,8 @@ public class FfmpegService {
             return;
         }
 
+        stopRequested.set(false);
+        lastStopReason.set(StopReason.NONE);
         List<String> command = buildAbridgedCommand(fileName);
 
         try {
@@ -32,11 +45,20 @@ public class FfmpegService {
             streamingStatus.set(StreamingStatus.STREAMING);
             this.ffmpegProcess.onExit().thenAccept(p -> {
                 int exitCode = p.exitValue();
+
+                if (stopRequested.get()) {
+                    log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                    streamingStatus.set(StreamingStatus.IDLE);
+                    return;
+                }
+
                 if (exitCode == 0) {
                     log.info("방송이 정상적으로 종료되었습니다.");
+                    lastStopReason.set(StopReason.PROCESS_EXIT);
                     streamingStatus.set(StreamingStatus.IDLE);
                 } else {
                     log.error("FFmpeg가 비정상 종료되었습니다. ExitCode: {}", exitCode);
+                    lastStopReason.set(StopReason.PROCESS_EXIT);
                     streamingStatus.set(StreamingStatus.ERROR);
                     // 여기서 필요시 자동 재시작 로직 호출 가능
                 }
@@ -46,6 +68,7 @@ public class FfmpegService {
 
         } catch (IOException e) {
             log.error("FFmpeg 실행 중 에러 발생", e);
+            streamingStatus.set(StreamingStatus.ERROR);
         }
     }
 
@@ -85,23 +108,14 @@ public class FfmpegService {
         return command;
     }
 
-    private void readLogs(Process process) {
-        new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("[FFmpeg] {}", line); // 자바 콘솔에서 FFmpeg 로그 확인 가능
-                }
-            } catch (IOException e) {
-                log.error("로그 읽기 에러", e);
-            }
-        }).start();
-    }
-
     public void stopStreaming() {
+        log.info("이미 종료된 방송입니다");
         if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
+            stopRequested.set(true);
+            streamingStatus.set(StreamingStatus.STOPPED);
+            lastStopReason.set(StopReason.USER_STOP);
             ffmpegProcess.destroy();
-            log.info("방송 송출 강제 종료");
+            log.info("사용자 요청으로 방송 중지");
         }
     }
 
@@ -109,10 +123,19 @@ public class FfmpegService {
         return streamingStatus.get();
     }
 
+    public StopReason getLastStopReason() {
+        return lastStopReason.get();
+    }
+
+    public StreamingInfo getStreamingInfo() {
+        return new StreamingInfo(streamingStatus.get(), lastStopReason.get());
+    }
+
     @PreDestroy
     public void destroy() {
         if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
             log.info("서버 종료로 인한 FFmpeg 강제 회수 중...");
+            stopRequested.set(true);
             ffmpegProcess.destroy(); // 기본 종료 시도
             try {
                 if (!ffmpegProcess.waitFor(5, TimeUnit.SECONDS)) {
@@ -122,5 +145,31 @@ public class FfmpegService {
                 Thread.currentThread().interrupt();
             }
         }
+    }
+
+    private void readLogs(Process process) {
+        CompletableFuture.runAsync(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Matcher matcher = SPEED_PATTERN.matcher(line);
+
+                    if (matcher.find()) {
+                        String speedStr = matcher.group(1);
+                        double speed = Double.parseDouble(speedStr);
+
+                        currentEncodingSpeed.set(speed);
+
+                        // 4. 부하 감지 (1.0 미만으로 떨어지면 경고)
+                        if (speed < 1.0) {
+                            log.warn("인코딩 부하 감지! 현재 속도: {}x", speed);
+                            // TODO: 여기서 이벤트를 발행하거나 화질 낮추기 로직을 호출할 수 있습니다.
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("FFmpeg 로그 읽기 중 오류 발생", e);
+            }
+        });
     }
 }
