@@ -124,6 +124,10 @@ public class FfmpegService {
         return streamingStatus.get();
     }
 
+    public double getCurrentEncodingSpeed() {
+        return currentEncodingSpeed.get();
+    }
+
     public StopReason getLastStopReason() {
         return lastStopReason.get();
     }
