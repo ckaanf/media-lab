@@ -22,7 +22,10 @@ import java.util.regex.Pattern;
 @Slf4j
 public class FfmpegService {
     private static final Pattern SPEED_PATTERN = Pattern.compile("speed=\\s*([0-9.]+)x");
-    private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(1.0);
+    private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(null);
+    private final AtomicReference<Long> activeSessionId = new AtomicReference<>(0L);
+    private final AtomicReference<Long> sessionSequence = new AtomicReference<>(0L);
+
 
     private Process ffmpegProcess;
     private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.IDLE);
@@ -36,6 +39,10 @@ public class FfmpegService {
             return;
         }
 
+        long sessionId = sessionSequence.updateAndGet(seq -> seq + 1);
+        activeSessionId.set(sessionId);
+        currentEncodingSpeed.set(null);
+
         stopRequested.set(false);
         lastStopReason.set(StopReason.NONE);
         List<String> command = buildAbridgedCommand(fileName);
@@ -43,12 +50,18 @@ public class FfmpegService {
         try {
             this.ffmpegProcess = startProcess(command);
             streamingStatus.set(StreamingStatus.STREAMING);
-            this.ffmpegProcess.onExit().thenAccept(p -> {
+            Process process = this.ffmpegProcess;
+            process.onExit().thenAccept(p -> {
+                if (!isCurrentSession(sessionId, p)) {
+                    return;
+                }
+
                 int exitCode = p.exitValue();
 
                 if (stopRequested.get()) {
                     log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
                     streamingStatus.set(StreamingStatus.IDLE);
+                    currentEncodingSpeed.set(null);
                     return;
                 }
 
@@ -62,13 +75,16 @@ public class FfmpegService {
                     streamingStatus.set(StreamingStatus.ERROR);
                     // 여기서 필요시 자동 재시작 로직 호출 가능
                 }
+
+                currentEncodingSpeed.set(null);
             });
 
-            readLogs(ffmpegProcess);
+            readLogs(process, sessionId);
 
         } catch (IOException e) {
             log.error("FFmpeg 실행 중 에러 발생", e);
             streamingStatus.set(StreamingStatus.ERROR);
+            currentEncodingSpeed.set(null);
         }
     }
 
@@ -113,15 +129,22 @@ public class FfmpegService {
             stopRequested.set(true);
             streamingStatus.set(StreamingStatus.STOPPED);
             lastStopReason.set(StopReason.USER_STOP);
+            currentEncodingSpeed.set(null);
             ffmpegProcess.destroy();
             log.info("사용자 요청으로 방송 중지");
         } else {
+            currentEncodingSpeed.set(null);
             log.info("이미 종료된 방송입니다");
         }
     }
 
     public StreamingStatus getStreamingStatus() {
         return streamingStatus.get();
+    }
+
+    public double getCurrentEncodingSpeed() {
+        Double speed = currentEncodingSpeed.get();
+        return speed != null ? speed : 0.0;
     }
 
     public StopReason getLastStopReason() {
@@ -148,21 +171,27 @@ public class FfmpegService {
         }
     }
 
-    private void readLogs(Process process) {
+    private void readLogs(Process process, long sessionId) {
         CompletableFuture.runAsync(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    if (!isCurrentSession(sessionId, process)) {
+                        return;
+                    }
+
                     Matcher matcher = SPEED_PATTERN.matcher(line);
 
                     if (matcher.find()) {
                         String speedStr = matcher.group(1);
 
-
-                        // 4. 부하 감지 (1.0 미만으로 떨어지면 경고)
                         try {
                             double speed = Double.parseDouble(speedStr);
-                            currentEncodingSpeed.set(speed);
+
+                            if (isCurrentSession(sessionId, process)) {
+                                currentEncodingSpeed.set(speed);
+                            }
+
                             if (speed < 1.0) {
                                 log.warn("인코딩 부하 감지! 현재 속도: {}x", speed);
                                 // TODO: 여기서 이벤트를 발행하거나 화질 낮추기 로직을 호출할 수 있습니다.
@@ -176,5 +205,9 @@ public class FfmpegService {
                 log.error("FFmpeg 로그 읽기 중 오류 발생", e);
             }
         });
+    }
+
+    private boolean isCurrentSession(long sessionId, Process process) {
+        return activeSessionId.get() == sessionId && ffmpegProcess == process;
     }
 }
