@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -30,11 +33,19 @@ public class FfmpegService {
     private final AtomicReference<Long> activeSessionId = new AtomicReference<>(0L);
     private final AtomicReference<Long> sessionSequence = new AtomicReference<>(0L);
 
-    private record StreamingContext(
+    private record VideoContext(
             long sessionId,
             String fileName,
             java.nio.file.Path workDir
-    ) {}
+    ) {
+    }
+
+    private record StreamingContext(
+            long sessionId,
+            String streamKey,
+            java.nio.file.Path workDir
+    ) {
+    }
 
     private final AtomicReference<StreamingContext> currentContext = new AtomicReference<>(null);
     private Process ffmpegProcess;
@@ -44,8 +55,79 @@ public class FfmpegService {
 
     private final ApplicationEventPublisher eventPublisher;
 
+    public void startStreaming(String streamKey) {
+        CompletableFuture.runAsync(() -> {
+            if (!waitForStreamReady(streamKey)) {
+                log.error("스트림 준비 시간 초과: {}", streamKey);
+                return;
+            }
 
-    public synchronized void startStreaming(String fileName) {
+            log.info("라이브 스트리밍 시작 OBS: {}", streamKey);
+            executeStreamingFfmpeg(streamKey);
+        });
+    }
+
+    public void startFileStreaming(String fileName) {
+        CompletableFuture.runAsync(() -> {
+            java.nio.file.Path filePath = java.nio.file.Paths.get("/app/videos/", fileName);
+            if (!java.nio.file.Files.exists(filePath)) {
+                log.error("파일을 찾을 수 없습니다: {}", filePath);
+                return;
+            }
+
+            log.info("파일 기반 스트리밍 시작: {}", fileName);
+            executeFileFfmpeg(fileName);
+        });
+    }
+
+    private boolean waitForStreamReady(String streamKey) {
+        String inputUrl = "rtmp://rtmp-server:1935/live/" + streamKey; // 도커 컴포즈 서비스명 확인 필수
+        int maxRetries = 20;
+
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                log.info("스트림 확인 중... (시도 {}/{}) URL: {}", i + 1, maxRetries, inputUrl);
+
+                Process probe = new ProcessBuilder(
+                        "ffprobe", 
+                        "-v", "error", 
+                        "-i", inputUrl,
+                        "-show_streams",
+                        "-select_streams", "v:0" // 비디오 스트림이 있는지 명시적으로 확인
+                ).start();
+
+                // ffprobe가 무한 대기하는 것을 막기 위해 최대 5초까지 기다림
+                boolean finished = probe.waitFor(5, TimeUnit.SECONDS);
+
+                if (finished) {
+                    int exitCode = probe.exitValue();
+                    if (exitCode == 0) {
+                        log.info("✅ 스트림 준비 완료 확인 (비디오 스트림 포함)!");
+                        return true;
+                    } else {
+                        log.warn("❌ ffprobe 실패 (종료 코드: {}) - 스트림이 아직 안 열렸거나 비디오가 없을 수 있음", exitCode);
+                    }
+                } else {
+                    log.warn("⚠️ ffprobe 응답 지연 (Timeout) - 프로세스 강제 종료");
+                    probe.destroyForcibly();
+                }
+
+                Thread.sleep(500); // 대기 시간을 조금 줄여서 더 자주 확인
+
+            } catch (Exception e) {
+                log.error("🚨 ffprobe 실행 중 치명적 예외 발생: {}", e.getMessage());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        return false;
+    }
+
+
+    public synchronized void executeStreamingFfmpeg(String streamKey) {
         if (streamingStatus.get() == StreamingStatus.STREAMING) {
             log.warn("이미 방송이 송출 중입니다.");
             return;
@@ -55,16 +137,15 @@ public class FfmpegService {
         activeSessionId.set(sessionId);
         currentEncodingSpeed.set(null);
 
-        java.nio.file.Path workDir;
+        Path outputDirectory = Paths.get("/tmp/hls", streamKey);
         try {
-            workDir = java.nio.file.Files.createTempDirectory("hls-" + sessionId + "-");
-        } catch (IOException e) {
-            log.error("임시 디렉토리 생성 실패", e);
-            streamingStatus.set(StreamingStatus.ERROR);
-            return;
+            Files.createDirectories(outputDirectory);
+            log.info("HLS 출력 디렉토리 생성 완료: {}", outputDirectory);
+        } catch (Exception e) {
+            log.error("디렉토리 생성 실패", e);
         }
 
-        StreamingContext context = new StreamingContext(sessionId, fileName, workDir);
+        StreamingContext context = new StreamingContext(sessionId, streamKey, outputDirectory);
         currentContext.set(context);
 
         stopRequested.set(false);
@@ -95,14 +176,13 @@ public class FfmpegService {
                     eventPublisher.publishEvent(new StreamEndedEvent(
                             context.sessionId(),
                             streamId,
-                            context.fileName(),
+                            context.streamKey(),
                             context.workDir().toString()
                     ));
                 } else {
                     log.error("FFmpeg가 비정상 종료되었습니다. ExitCode: {}", exitCode);
                     lastStopReason.set(StopReason.PROCESS_EXIT);
                     streamingStatus.set(StreamingStatus.ERROR);
-                    // 여기서 필요시 자동 재시작 로직 호출 가능
                 }
 
                 currentEncodingSpeed.set(null);
@@ -117,39 +197,155 @@ public class FfmpegService {
         }
     }
 
+    public synchronized void executeFileFfmpeg(String fileName) {
+        if (streamingStatus.get() == StreamingStatus.STREAMING) {
+            log.warn("이미 방송이 송출 중입니다.");
+            return;
+        }
+
+        long sessionId = sessionSequence.updateAndGet(seq -> seq + 1);
+        activeSessionId.set(sessionId);
+        currentEncodingSpeed.set(null);
+
+        java.nio.file.Path workDir;
+        try {
+            workDir = java.nio.file.Files.createTempDirectory("hls-file-" + sessionId + "-");
+        } catch (IOException e) {
+            log.error("임시 디렉토리 생성 실패", e);
+            streamingStatus.set(StreamingStatus.ERROR);
+            return;
+        }
+
+        VideoContext context = new VideoContext(sessionId, fileName, workDir);
+        // currentContext는 StreamingContext를 저장하도록 되어 있으므로, 파일 기반 컨텍스트를 지원하도록 확장이 필요할 수도 있지만,
+        // 현재는 stopStreaming 등에서 세션 체크를 위해 사용하므로 일단 유지합니다.
+        // 다만 StreamingContext와 VideoContext가 서로 다른 레코드이므로 currentContext에 저장할 수 없습니다.
+        // 여기서는 stop 기능을 위해 currentContext에 가상의 StreamingContext를 넣어둡니다 (세션 ID만 동일하면 됨).
+        currentContext.set(new StreamingContext(sessionId, "file-streaming", workDir));
+
+        stopRequested.set(false);
+        lastStopReason.set(StopReason.NONE);
+        List<String> command = buildAbridgedCommand(context);
+
+        try {
+            this.ffmpegProcess = startProcess(command);
+            streamingStatus.set(StreamingStatus.STREAMING);
+            Process process = this.ffmpegProcess;
+            process.onExit().thenAccept(p -> {
+                if (!isCurrentSession(sessionId, p)) {
+                    return;
+                }
+
+                int exitCode = p.exitValue();
+
+                if (exitCode == 0 || stopRequested.get()) {
+                    if (stopRequested.get()) {
+                        log.info("파일 스트리밍이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                    } else {
+                        log.info("파일 스트리밍이 정상적으로 종료되었습니다.");
+                        lastStopReason.set(StopReason.PROCESS_EXIT);
+                    }
+                    streamingStatus.set(StreamingStatus.IDLE);
+
+                    String streamId = "stream-" + context.sessionId();
+                    eventPublisher.publishEvent(new StreamEndedEvent(
+                            context.sessionId(),
+                            streamId,
+                            context.fileName(),
+                            context.workDir().toString()
+                    ));
+                } else {
+                    log.error("FFmpeg(File)가 비정상 종료되었습니다. ExitCode: {}", exitCode);
+                    lastStopReason.set(StopReason.PROCESS_EXIT);
+                    streamingStatus.set(StreamingStatus.ERROR);
+                }
+
+                currentEncodingSpeed.set(null);
+            });
+
+            readLogs(process, sessionId);
+
+        } catch (IOException e) {
+            log.error("FFmpeg(File) 실행 중 에러 발생", e);
+            streamingStatus.set(StreamingStatus.ERROR);
+            currentEncodingSpeed.set(null);
+        }
+    }
+
     protected Process startProcess(List<String> command) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
         return pb.start();
     }
 
-    private List<String> buildAbridgedCommand(StreamingContext context) {
+    private List<String> buildAbridgedCommand(VideoContext context) {
         List<String> command = new ArrayList<>();
         command.add("ffmpeg");
         command.add("-re");
         command.add("-i");
         command.add("/app/videos/" + context.fileName()); // 컨테이너 내부 경로
 
-        command.add("-filter_complex");
-        command.add("[0:v]split=3[v1][v2][v3];[v1]scale=w=1920:h=1080[v1out];[v2]scale=w=1280:h=720[v2out];[v3]scale=w=854:h=480[v3out];[0:a]asplit=3[a1][a2][a3]");
-
-        command.addAll(List.of("-map", "[v1out]", "-c:v:0", "libx264", "-preset", "ultrafast", "-b:v:0", "5000k"));
-        command.addAll(List.of("-map", "[v2out]", "-c:v:1", "libx264", "-preset", "ultrafast", "-b:v:1", "2500k"));
-        command.addAll(List.of("-map", "[v3out]", "-c:v:2", "libx264", "-preset", "ultrafast", "-b:v:2", "1000k"));
-
-        command.addAll(List.of("-map", "[a1]", "-c:a:0", "aac", "-ac", "2", "-ar", "44100", "-b:a:0", "128k"));
-        command.addAll(List.of("-map", "[a2]", "-c:a:1", "aac", "-ac", "2", "-ar", "44100", "-b:a:1", "128k"));
-        command.addAll(List.of("-map", "[a3]", "-c:a:2", "aac", "-ac", "2", "-ar", "44100", "-b:a:2", "128k"));
-
+        // 단일 화질 출력으로 단순화 (1080p 기본)
         command.addAll(List.of(
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-b:v", "5000k",
+                "-maxrate", "5000k",
+                "-bufsize", "10000k",
+                "-pix_fmt", "yuv420p",
+                "-g", "60",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-ac", "2",
+                "-ar", "44100",
                 "-f", "hls",
-                "-hls_time", "2",
+                "-hls_time", "4",
                 "-hls_list_size", "6",
                 "-hls_flags", "delete_segments",
-                "-master_pl_name", "master.m3u8",
-                "-var_stream_map", "v:0,a:0,name:1080p v:1,a:1,name:720p v:2,a:2,name:480p",
-                context.workDir().resolve("%v").resolve("index.m3u8").toString()
+                context.workDir().resolve("index.m3u8").toString()
         ));
+        return command;
+    }
+
+    private List<String> buildAbridgedCommand(StreamingContext context) {
+        String inputUrl = "rtmp://rtmp-server:1935/live/" + context.streamKey();
+
+        List<String> command = new ArrayList<>();
+        command.add("ffmpeg");
+
+        command.add("-rw_timeout");
+        command.add("5000000"); // 5초 대기
+
+        // ★ 주의: 라이브 소스(RTMP)를 받을 때 -re 옵션은 절대 사용하면 안 됩니다.
+        // (프레임 드랍 및 비디오 블랙아웃의 주범)
+        // -fflags nobuffer+genpts 도 실시간 인제스트에서는 오히려 불안정성을 유발할 수 있어 제거했습니다.
+
+        command.add("-i");
+        command.add(inputUrl);
+
+        command.add("-map"); command.add("0:v");
+        command.add("-map"); command.add("0:a");
+
+        // 2. 단일 화질 출력으로 단순화 (브라우저 호환성 및 안정성 극대화)
+        command.addAll(List.of(
+                "-c:v", "libx264",
+                "-profile:v", "main",      // ★ 브라우저(Safari, Chrome) 호환성을 위한 프로필 지정
+                "-preset", "veryfast",
+                "-b:v", "5000k",
+                "-maxrate", "5000k",
+                "-bufsize", "10000k",
+                "-pix_fmt", "yuv420p",     // ★ 웹 표준 픽셀 포맷
+                "-g", "60",                // ★ 2초마다 완벽한 키프레임 강제 생성 (30fps 기준)
+                "-sc_threshold", "0",      // ★ 화면이 갑자기 바뀔 때 키프레임 주기가 꼬이는 것 방지
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-f", "hls",
+                "-hls_time", "4",
+                "-hls_list_size", "6",
+                "-hls_flags", "delete_segments",
+                context.workDir().resolve("index.m3u8").toString()
+        ));
+
         return command;
     }
 
@@ -206,6 +402,8 @@ public class FfmpegService {
                     if (!isCurrentSession(sessionId, process)) {
                         return;
                     }
+
+                    log.info("[FFmpeg Raw] {}", line);
 
                     Matcher matcher = SPEED_PATTERN.matcher(line);
 
