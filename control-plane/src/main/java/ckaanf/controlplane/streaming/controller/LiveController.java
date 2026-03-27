@@ -1,7 +1,7 @@
-package ckaanf.controlplane.controller;
+package ckaanf.controlplane.streaming.controller;
 
-import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
-import ckaanf.controlplane.service.FfmpegService;
+import ckaanf.controlplane.streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.service.FfmpegService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

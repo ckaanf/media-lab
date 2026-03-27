@@ -1,4 +1,4 @@
-package ckaanf.controlplane.domain.Streaming;
+package ckaanf.controlplane.streaming.constant;
 
 public enum StreamingStatus {
     IDLE,

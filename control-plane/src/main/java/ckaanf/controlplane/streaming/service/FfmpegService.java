@@ -1,10 +1,13 @@
-package ckaanf.controlplane.service;
+package ckaanf.controlplane.streaming.service;
 
-import ckaanf.controlplane.domain.Streaming.StopReason;
-import ckaanf.controlplane.domain.Streaming.StreamingStatus;
-import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.constant.StopReason;
+import ckaanf.controlplane.streaming.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.response.StreamingInfo;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -20,17 +23,26 @@ import java.util.regex.Pattern;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FfmpegService {
     private static final Pattern SPEED_PATTERN = Pattern.compile("speed=\\s*([0-9.]+)x");
     private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(null);
     private final AtomicReference<Long> activeSessionId = new AtomicReference<>(0L);
     private final AtomicReference<Long> sessionSequence = new AtomicReference<>(0L);
 
+    private record StreamingContext(
+            long sessionId,
+            String fileName,
+            java.nio.file.Path workDir
+    ) {}
 
+    private final AtomicReference<StreamingContext> currentContext = new AtomicReference<>(null);
     private Process ffmpegProcess;
     private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.IDLE);
     private final AtomicReference<StopReason> lastStopReason = new AtomicReference<>(StopReason.NONE);
     private final AtomicReference<Boolean> stopRequested = new AtomicReference<>(false);
+
+    private final ApplicationEventPublisher eventPublisher;
 
 
     public synchronized void startStreaming(String fileName) {
@@ -43,9 +55,21 @@ public class FfmpegService {
         activeSessionId.set(sessionId);
         currentEncodingSpeed.set(null);
 
+        java.nio.file.Path workDir;
+        try {
+            workDir = java.nio.file.Files.createTempDirectory("hls-" + sessionId + "-");
+        } catch (IOException e) {
+            log.error("임시 디렉토리 생성 실패", e);
+            streamingStatus.set(StreamingStatus.ERROR);
+            return;
+        }
+
+        StreamingContext context = new StreamingContext(sessionId, fileName, workDir);
+        currentContext.set(context);
+
         stopRequested.set(false);
         lastStopReason.set(StopReason.NONE);
-        List<String> command = buildAbridgedCommand(fileName);
+        List<String> command = buildAbridgedCommand(context);
 
         try {
             this.ffmpegProcess = startProcess(command);
@@ -58,17 +82,22 @@ public class FfmpegService {
 
                 int exitCode = p.exitValue();
 
-                if (stopRequested.get()) {
-                    log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                if (exitCode == 0 || stopRequested.get()) {
+                    if (stopRequested.get()) {
+                        log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                    } else {
+                        log.info("방송이 정상적으로 종료되었습니다.");
+                        lastStopReason.set(StopReason.PROCESS_EXIT);
+                    }
                     streamingStatus.set(StreamingStatus.IDLE);
-                    currentEncodingSpeed.set(null);
-                    return;
-                }
 
-                if (exitCode == 0) {
-                    log.info("방송이 정상적으로 종료되었습니다.");
-                    lastStopReason.set(StopReason.PROCESS_EXIT);
-                    streamingStatus.set(StreamingStatus.IDLE);
+                    String streamId = "stream-" + context.sessionId();
+                    eventPublisher.publishEvent(new StreamEndedEvent(
+                            context.sessionId(),
+                            streamId,
+                            context.fileName(),
+                            context.workDir().toString()
+                    ));
                 } else {
                     log.error("FFmpeg가 비정상 종료되었습니다. ExitCode: {}", exitCode);
                     lastStopReason.set(StopReason.PROCESS_EXIT);
@@ -94,12 +123,12 @@ public class FfmpegService {
         return pb.start();
     }
 
-    private List<String> buildAbridgedCommand(String fileName) {
+    private List<String> buildAbridgedCommand(StreamingContext context) {
         List<String> command = new ArrayList<>();
         command.add("ffmpeg");
         command.add("-re");
         command.add("-i");
-        command.add("/app/videos/" + fileName); // 컨테이너 내부 경로
+        command.add("/app/videos/" + context.fileName()); // 컨테이너 내부 경로
 
         command.add("-filter_complex");
         command.add("[0:v]split=3[v1][v2][v3];[v1]scale=w=1920:h=1080[v1out];[v2]scale=w=1280:h=720[v2out];[v3]scale=w=854:h=480[v3out];[0:a]asplit=3[a1][a2][a3]");
@@ -118,8 +147,8 @@ public class FfmpegService {
                 "-hls_list_size", "6",
                 "-hls_flags", "delete_segments",
                 "-master_pl_name", "master.m3u8",
-                "-var_stream_map", "v:0,a:0,name:1080 v:1,a:1,name:720 v:2,a:2,name:480",
-                "/tmp/hls/%v/index.m3u8"
+                "-var_stream_map", "v:0,a:0,name:1080p v:1,a:1,name:720p v:2,a:2,name:480p",
+                context.workDir().resolve("%v").resolve("index.m3u8").toString()
         ));
         return command;
     }
@@ -129,11 +158,9 @@ public class FfmpegService {
             stopRequested.set(true);
             streamingStatus.set(StreamingStatus.STOPPED);
             lastStopReason.set(StopReason.USER_STOP);
-            currentEncodingSpeed.set(null);
             ffmpegProcess.destroy();
             log.info("사용자 요청으로 방송 중지");
         } else {
-            currentEncodingSpeed.set(null);
             log.info("이미 종료된 방송입니다");
         }
     }
@@ -160,10 +187,10 @@ public class FfmpegService {
         if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
             log.info("서버 종료로 인한 FFmpeg 강제 회수 중...");
             stopRequested.set(true);
-            ffmpegProcess.destroy(); // 기본 종료 시도
+            ffmpegProcess.destroy();
             try {
                 if (!ffmpegProcess.waitFor(5, TimeUnit.SECONDS)) {
-                    ffmpegProcess.destroyForcibly(); // 안 죽으면 강제 사살
+                    ffmpegProcess.destroyForcibly();
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
