@@ -37,12 +37,12 @@ class FfmpegServiceTest {
 
     @Test
     @DisplayName("스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
-    void startStreaming_Success() throws IOException {
+    void executeFfmpeg_Success() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
         // when
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
@@ -52,13 +52,13 @@ class FfmpegServiceTest {
 
     @Test
     @DisplayName("이미 스트리밍 중일 때 다시 시작하면 추가 프로세스가 실행되지 않아야 함")
-    void startStreaming_AlreadyStreaming() throws IOException {
+    void executeFfmpeg_AlreadyStreaming() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
@@ -72,7 +72,7 @@ class FfmpegServiceTest {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
         when(mockProcess.isAlive()).thenReturn(true);
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         ffmpegService.stopStreaming();
@@ -91,7 +91,7 @@ class FfmpegServiceTest {
         when(mockProcess.isAlive()).thenReturn(true, false);
         when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
 
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         ffmpegService.stopStreaming(); // 최초 stop
@@ -112,7 +112,7 @@ class FfmpegServiceTest {
         when(mockProcess.exitValue()).thenReturn(0);
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
 
         // when
@@ -131,7 +131,7 @@ class FfmpegServiceTest {
         when(mockProcess.exitValue()).thenReturn(1);
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         exitFuture.complete(mockProcess);
@@ -152,7 +152,7 @@ class FfmpegServiceTest {
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
         // when
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // then
         await().atMost(2, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -169,7 +169,7 @@ class FfmpegServiceTest {
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
         // when
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // then
         await().atMost(2, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -182,7 +182,7 @@ class FfmpegServiceTest {
     void getStreamingInfo_ShouldReturnCorrectInfo() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         StreamingInfo info = ffmpegService.getStreamingInfo();
@@ -199,7 +199,7 @@ class FfmpegServiceTest {
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
         when(mockProcess.isAlive()).thenReturn(true);
         when(mockProcess.waitFor(anyLong(), any())).thenReturn(true);
-        ffmpegService.startStreaming("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         ffmpegService.destroy();
