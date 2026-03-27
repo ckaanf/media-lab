@@ -36,13 +36,28 @@ class FfmpegServiceTest {
     }
 
     @Test
-    @DisplayName("스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
-    void executeFfmpeg_Success() throws IOException {
+    @DisplayName("RTMP 스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
+    void executeStreamingFfmpeg_Success() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
 
         // when
-        ffmpegService.executeStreamingFfmpeg("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test-stream");
+
+        // then
+        assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
+        assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.NONE);
+        verify(ffmpegService, times(1)).startProcess(any());
+    }
+
+    @Test
+    @DisplayName("파일 기반 스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
+    void executeFileFfmpeg_Success() throws IOException {
+        // given
+        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+
+        // when
+        ffmpegService.executeFileFfmpeg("sample.mp4");
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
@@ -55,14 +70,13 @@ class FfmpegServiceTest {
     void executeFfmpeg_AlreadyStreaming() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        ffmpegService.executeStreamingFfmpeg("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test-stream");
 
         // when
-        ffmpegService.executeStreamingFfmpeg("test.mp4");
+        ffmpegService.executeStreamingFfmpeg("test-stream");
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
-        assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.NONE);
         verify(ffmpegService, times(1)).startProcess(any());
     }
 
