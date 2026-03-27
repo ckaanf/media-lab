@@ -13,7 +13,7 @@ import java.nio.file.*;
 @Service
 public class VodService {
 
-    private static final String VOD_STORAGE_BASE_PATH = "/app/vidoes/";
+    private static final String VOD_STORAGE_BASE_PATH = "/app/videos/";
     private static final String[] QUALITIES = {"1080p", "720p", "480p"};
 
     @Async
@@ -26,29 +26,46 @@ public class VodService {
                 ? event.fileName().substring(0, event.fileName().lastIndexOf('.')) 
                 : event.fileName();
 
-        for (String quality : QUALITIES) {
-            Path sourceM3u8 = sourceBaseDir.resolve(quality).resolve("index.m3u8");
-            
-            if (!Files.exists(sourceM3u8)) {
-                log.warn("[{}] m3u8 파일을 찾을 수 없습니다: {}", quality, sourceM3u8);
-                continue;
-            }
+        try {
+            for (String quality : QUALITIES) {
+                Path sourceM3u8 = sourceBaseDir.resolve(quality).resolve("index.m3u8");
+                
+                if (!Files.exists(sourceM3u8)) {
+                    log.warn("[{}] m3u8 파일을 찾을 수 없습니다: {}", quality, sourceM3u8);
+                    continue;
+                }
 
-            // sessionId/streamingName/quality/
-            Path targetDir = Paths.get(VOD_STORAGE_BASE_PATH, String.valueOf(event.sessionId()), streamName, quality);
-            Path targetFile = targetDir.resolve(streamName + ".mp4");
+                // sessionId/streamingName/quality/
+                Path targetDir = Paths.get(VOD_STORAGE_BASE_PATH, String.valueOf(event.sessionId()), streamName, quality);
+                Path targetFile = targetDir.resolve(streamName + ".mp4");
 
-            try {
-                Files.createDirectories(targetDir);
-                convertToMp4(sourceM3u8, targetFile);
-                log.info("[VOD 자산화 완료] 품질: {}, 경로: {}", quality, targetFile);
-            } catch (IOException | InterruptedException e) {
-                log.error("[VOD 자산화 실패] 품질: {}, Stream ID: {}", quality, event.streamId(), e);
+                try {
+                    Files.createDirectories(targetDir);
+                    convertToMp4(sourceM3u8, targetFile);
+                    log.info("[VOD 자산화 완료] 품질: {}, 경로: {}", quality, targetFile);
+                } catch (IOException | InterruptedException e) {
+                    log.error("[VOD 자산화 실패] 품질: {}, Stream ID: {}", quality, event.streamId(), e);
+                }
             }
+        } finally {
+            // Clean-up: 모든 작업 완료 후 소스 디렉토리 삭제
+            cleanUp(sourceBaseDir);
         }
+    }
 
-        // Clean-up: 모든 작업 완료 후 소스 디렉토리 삭제 (필요시)
-        // cleanUp(sourceBaseDir);
+    private void cleanUp(Path path) {
+        try {
+            if (Files.exists(path)) {
+                try (java.util.stream.Stream<Path> walk = Files.walk(path)) {
+                    walk.sorted(java.util.Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(java.io.File::delete);
+                }
+                log.info("[Clean-up 완료] 소스 디렉토리 삭제됨: {}", path);
+            }
+        } catch (IOException e) {
+            log.warn("[Clean-up 실패] 소스 디렉토리 삭제 중 오류 발생: {}", path, e);
+        }
     }
 
     private void convertToMp4(Path sourceM3u8, Path targetFile) throws IOException, InterruptedException {
