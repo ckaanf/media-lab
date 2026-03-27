@@ -23,9 +23,14 @@
 
 ## 🚀 Current Milestone (진행 중인 과제)
 **Step 1: RTMP 인제스트 서버 구축 및 "가짜 라이브(Fake Live)" 스트리밍 실험**
-- [ ] NGINX-RTMP 도커 환경 셋업 (1935 Port)
-- [ ] FFmpeg `-re` 옵션을 활용한 로컬 MP4 파일 실시간 RTMP 송출 (Mocking Live Stream)
-- [ ] VLC 플레이어를 통한 라이브 스트리밍 정상 수신 확인
+- [X] NGINX-RTMP 도커 환경 셋업 (1935 Port)
+- [X] FFmpeg `-re` 옵션을 활용한 로컬 MP4 파일 실시간 RTMP 송출 (Mocking Live Stream)
+- [X] VLC 플레이어를 통한 라이브 스트리밍 정상 수신 확인
+
+**Step 2: RTMP 영상 수신 후 HLS 송출 / 재산화 고려 / 도메인 학습**
+- [X] Java Server로 FFmpeg 제어
+- [ ] 방송 종료 후 HLS를 VOD로 제작 (다시보기 등)
+- [ ] 고민 중
 
 ## 🛠 Tech Stack
 - **Backend Core**: Java (Spring Boot), C++
