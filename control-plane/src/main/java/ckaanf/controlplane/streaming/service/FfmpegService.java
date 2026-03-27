@@ -1,10 +1,13 @@
-package ckaanf.controlplane.service;
+package ckaanf.controlplane.streaming.service;
 
-import ckaanf.controlplane.domain.Streaming.StopReason;
-import ckaanf.controlplane.domain.Streaming.StreamingStatus;
-import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.constant.StopReason;
+import ckaanf.controlplane.streaming.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.response.StreamingInfo;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -20,17 +23,20 @@ import java.util.regex.Pattern;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FfmpegService {
     private static final Pattern SPEED_PATTERN = Pattern.compile("speed=\\s*([0-9.]+)x");
     private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(null);
     private final AtomicReference<Long> activeSessionId = new AtomicReference<>(0L);
     private final AtomicReference<Long> sessionSequence = new AtomicReference<>(0L);
 
-
+    private final AtomicReference<String> currentFileName = new AtomicReference<>(null);
     private Process ffmpegProcess;
     private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.IDLE);
     private final AtomicReference<StopReason> lastStopReason = new AtomicReference<>(StopReason.NONE);
     private final AtomicReference<Boolean> stopRequested = new AtomicReference<>(false);
+
+    private final ApplicationEventPublisher eventPublisher;
 
 
     public synchronized void startStreaming(String fileName) {
@@ -42,6 +48,7 @@ public class FfmpegService {
         long sessionId = sessionSequence.updateAndGet(seq -> seq + 1);
         activeSessionId.set(sessionId);
         currentEncodingSpeed.set(null);
+        currentFileName.set(fileName);
 
         stopRequested.set(false);
         lastStopReason.set(StopReason.NONE);
@@ -58,17 +65,19 @@ public class FfmpegService {
 
                 int exitCode = p.exitValue();
 
-                if (stopRequested.get()) {
-                    log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                if (exitCode == 0 || stopRequested.get()) {
+                    if (stopRequested.get()) {
+                        log.info("방송이 사용자 요청으로 정상적으로 중단되었습니다. ExitCode: {}", exitCode);
+                    } else {
+                        log.info("방송이 정상적으로 종료되었습니다.");
+                        lastStopReason.set(StopReason.PROCESS_EXIT);
+                    }
                     streamingStatus.set(StreamingStatus.IDLE);
-                    currentEncodingSpeed.set(null);
-                    return;
-                }
 
-                if (exitCode == 0) {
-                    log.info("방송이 정상적으로 종료되었습니다.");
-                    lastStopReason.set(StopReason.PROCESS_EXIT);
-                    streamingStatus.set(StreamingStatus.IDLE);
+                    String streamId = "stream-" + sessionId; // streamId 생성이 필요함 (예시)
+                    String streamName = currentFileName.get();
+                    String liveDirectory = "/tmp/hls"; // buildAbridgedCommand의 경로와 일치해야 함
+                    eventPublisher.publishEvent(new StreamEndedEvent(sessionId, streamId, streamName, liveDirectory));
                 } else {
                     log.error("FFmpeg가 비정상 종료되었습니다. ExitCode: {}", exitCode);
                     lastStopReason.set(StopReason.PROCESS_EXIT);
@@ -129,11 +138,9 @@ public class FfmpegService {
             stopRequested.set(true);
             streamingStatus.set(StreamingStatus.STOPPED);
             lastStopReason.set(StopReason.USER_STOP);
-            currentEncodingSpeed.set(null);
             ffmpegProcess.destroy();
             log.info("사용자 요청으로 방송 중지");
         } else {
-            currentEncodingSpeed.set(null);
             log.info("이미 종료된 방송입니다");
         }
     }
@@ -160,10 +167,10 @@ public class FfmpegService {
         if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
             log.info("서버 종료로 인한 FFmpeg 강제 회수 중...");
             stopRequested.set(true);
-            ffmpegProcess.destroy(); // 기본 종료 시도
+            ffmpegProcess.destroy();
             try {
                 if (!ffmpegProcess.waitFor(5, TimeUnit.SECONDS)) {
-                    ffmpegProcess.destroyForcibly(); // 안 죽으면 강제 사살
+                    ffmpegProcess.destroyForcibly();
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

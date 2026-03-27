@@ -1,16 +1,16 @@
-package ckaanf.controlplane.service;
+package ckaanf.controlplane.streaming.service;
 
-import ckaanf.controlplane.domain.Streaming.StopReason;
-import ckaanf.controlplane.domain.Streaming.StreamingStatus;
-import ckaanf.controlplane.domain.Streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.constant.StopReason;
+import ckaanf.controlplane.streaming.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.service.FfmpegService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -23,16 +23,15 @@ class FfmpegServiceTest {
 
     private FfmpegService ffmpegService;
     private Process mockProcess;
+    private ApplicationEventPublisher eventPublisher;
 
     @BeforeEach
     void setUp() {
         mockProcess = mock(Process.class);
-        // Spy를 사용하여 startProcess만 모킹함
-        ffmpegService = spy(new FfmpegService());
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        ffmpegService = spy(new FfmpegService(eventPublisher));
         
-        // Mock process setup
         when(mockProcess.getInputStream()).thenReturn(new ByteArrayInputStream("test log".getBytes()));
-        // 기본적으로 종료되지 않은 프로세스를 시뮬레이션
         when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
     }
 
@@ -56,10 +55,10 @@ class FfmpegServiceTest {
     void startStreaming_AlreadyStreaming() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        ffmpegService.startStreaming("test.mp4"); // First call
+        ffmpegService.startStreaming("test.mp4");
 
         // when
-        ffmpegService.startStreaming("test.mp4"); // Second call
+        ffmpegService.startStreaming("test.mp4");
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
@@ -89,7 +88,7 @@ class FfmpegServiceTest {
     void stopStreaming_When_AlreadyStopped() throws IOException {
         // given
         doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        when(mockProcess.isAlive()).thenReturn(true, false); // 첫 stop 때만 살아있다고 가정
+        when(mockProcess.isAlive()).thenReturn(true, false);
         when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
 
         ffmpegService.startStreaming("test.mp4");
