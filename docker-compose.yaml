@@ -12,8 +12,6 @@ services:
     volumes:
       - ./videos:/app/videos       # 원본 영상 읽기
       - ./hls_data:/tmp/hls        # HLS 파일 쓰기
-    devices:
-      - /dev/dri:/dev/dri          # 하드웨어 가속 패스스루
     restart: always
 
   # 2. 서빙 서버 (NGINX)

@@ -7,8 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.concurrent.CompletableFuture;
-
 @RestController
 @RequestMapping("/api/live")
 @RequiredArgsConstructor
@@ -20,15 +18,18 @@ public class LiveController {
     @PostMapping("/publish")
     public ResponseEntity<Void> publish(@RequestParam("name") String streamKey) {
         log.info("OBS 방송 수신 확인! StreamKey: {}", streamKey);
+        ffmpegService.startStreaming(streamKey);
 
-        // [핵심] FFmpeg 실행은 별도 스레드에 맡깁니다.
-        CompletableFuture.runAsync(() -> {
-            ffmpegService.startStreaming(streamKey);
-        });
-
-        // [핵심] 메인 스레드는 즉시 200 OK를 반환하여 NGINX의 잠금을 해제합니다.
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/done")
+    public ResponseEntity<Void> done(@RequestParam("name") String streamKey) {
+        log.info("🛑 OBS 방송 종료 수신! StreamKey: {}", streamKey);
+        ffmpegService.stopStreaming();
+        return ResponseEntity.ok().build();
+    }
+
 
     @GetMapping("/start")
     public StreamingInfo start(@RequestParam(defaultValue = "sample.mp4") String fileName) {
