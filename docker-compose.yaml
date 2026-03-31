@@ -25,5 +25,4 @@ services:
       - ./live-server/nginx.conf:/etc/nginx/nginx.conf # 설정 파일 위치 주의
       - ./live-server/www:/www
       - ./hls_data:/tmp/hls        # 생성된 파일 읽어서 서빙
-      - ./live-server/www:/etc/nginx/www  # 정적 index.html 서빙
     restart: always
