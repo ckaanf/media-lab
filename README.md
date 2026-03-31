@@ -10,7 +10,8 @@
 
 초기에는 정적인 VOD(Video On Demand) 서비스에서의 파일 I/O 및 스트리밍 성능 최적화(C++ vs Java)에 집중했습니다. 하지만 0.5초의 지연도 용납하지 않는 버츄얼 3D 라이브 및 실시간 인터랙션 시장의 아키텍처에 매력을 느껴, **초저지연 라이브 스트리밍 코어 구축**으로 프로젝트의 방향을 피벗(Pivot)했습니다.
 
-  * 📜 [Phase 1: VOD 스트리밍 및 파일 I/O 최적화 연구 기록 보기](https://www.google.com/search?q=./OLD_README_VOD.md)
+  * 📜 [Phase 1: VOD 스트리밍 및 파일 I/O 최적화 연구 기록 보기](vod-server/experiments/results/experiment_io.md)
+  *  [Phase 2: 초지연 스트리밍도 결국 시청자 입장에선 작은 단위의 정적 파일을 서빙 받는 것이라는 걸 알았음 이걸 고려해서 진짜 **라이브 스트리밍 플랫폼의 기술적 고민이나 기능을 직접 개발하는 걸 도전**
 
 ## 🏗️ Architecture & Modules
 
