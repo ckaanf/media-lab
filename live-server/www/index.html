@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Media-Lab Live</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0d0d0e;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #18181b;
+            padding: 15px 20px;
+            border-bottom: 1px solid #2d2d30;
+            font-weight: bold;
+            color: #00ffa3;
+        }
+
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .video-container {
+            flex: 3;
+            background: black;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            max-height: 100%;
+        }
+
+        .chat-container {
+            flex: 1;
+            background: #18181b;
+            border-left: 1px solid #2d2d30;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px;
+            border-bottom: 1px solid #2d2d30;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            color: #adadb8;
+            overflow-y: auto;
+        }
+
+        .chat-input {
+            padding: 15px;
+            border-top: 1px solid #2d2d30;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            background: #2d2d30;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: #ff0000;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <header>MEDIA LAB LIVE</header>
+    <main>
+        <div class="video-container">
+            <div class="status">LIVE</div>
+            <video id="video" controls autoplay muted></video>
+        </div>
+        <div class="chat-container">
+            <div class="chat-header">실시간 채팅</div>
+            <div class="chat-messages">
+                <p><b style="color: #00ffa3;">시스템:</b> 진수님의 미디어 서버에 연결되었습니다.</p>
+                <p><b style="color: #5d5dff;">익명1:</b> 오 진짜 나오네요!</p>
+                <p><b style="color: #ff5d5d;">익명2:</b> 화질 대박입니다 ㄷㄷ</p>
+            </div>
+            <div class="chat-input">
+                <input type="text" placeholder="채팅에 참여해보세요">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        var video = document.getElementById('video');
+        // 💡 주의: FFmpeg가 만들어내는 파일명이 index.m3u8 인지 playlist.m3u8 인지 꼭 확인하세요!
+        var videoSrc = 'http://localhost:8080/hls/ckaanf/index.m3u8';
+
+        // 1. 브라우저가 MediaSource Extensions(MSE)를 지원하여 hls.js를 쓸 수 있는 경우 (크롬, 엣지, 파이어폭스)
+        if (Hls.isSupported()) {
+            var hls = new Hls({
+                debug: true, // 콘솔창 디버깅용 (상용 배포 시 false)
+                manifestLoadingRetryDelay: 5000,
+                manifestLoadingMaxRetry: 5
+            });
+
+            hls.loadSource(videoSrc);
+            hls.attachMedia(video);
+
+            // 영상 매니페스트를 성공적으로 읽어왔을 때 재생 시작
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                video.play().catch(function (e) {
+                    console.warn("자동 재생이 브라우저 정책에 의해 차단되었습니다:", e);
+                });
+            });
+
+            // 에러 핸들링
+            hls.on(Hls.Events.ERROR, function (event, data) {
+                if (data.fatal) {
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            console.error("진수님, 네트워크 에러입니다. (서버가 꺼졌거나 CORS 문제일 확률이 높음) ->", data.details);
+                            hls.startLoad(); // 복구 시도
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            console.error("미디어 포맷 에러입니다. (FFmpeg 코덱/키프레임 설정 문제) ->", data.details);
+                            hls.recoverMediaError(); // 복구 시도
+                            break;
+                        default:
+                            hls.destroy(); // 치명적 에러 시 hls 객체 파괴
+                            break;
+                    }
+                } else {
+                    console.warn("일반 에러 발생 ->", data.details);
+                }
+            });
+        }
+        // 2. 브라우저가 자체적으로 HLS를 지원하는 경우 (Safari)
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = videoSrc;
+            video.addEventListener('loadedmetadata', function () {
+                video.play();
+            });
+        }
+    </script>
+</body>
+
+</html>

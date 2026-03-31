@@ -8,9 +8,13 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.FileSystemUtils;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -54,6 +58,8 @@ public class FfmpegService {
     private final AtomicReference<Boolean> stopRequested = new AtomicReference<>(false);
 
     private final ApplicationEventPublisher eventPublisher;
+    private final ThreadPoolTaskExecutor mediaTaskExecutor;
+
 
     public void startStreaming(String streamKey) {
         CompletableFuture.runAsync(() -> {
@@ -64,7 +70,7 @@ public class FfmpegService {
 
             log.info("라이브 스트리밍 시작 OBS: {}", streamKey);
             executeStreamingFfmpeg(streamKey);
-        });
+        }, mediaTaskExecutor);
     }
 
     public void startFileStreaming(String fileName) {
@@ -77,7 +83,7 @@ public class FfmpegService {
 
             log.info("파일 기반 스트리밍 시작: {}", fileName);
             executeFileFfmpeg(fileName);
-        });
+        }, mediaTaskExecutor);
     }
 
     private boolean waitForStreamReady(String streamKey) {
@@ -350,15 +356,9 @@ public class FfmpegService {
     }
 
     public void stopStreaming() {
-        if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
-            stopRequested.set(true);
-            streamingStatus.set(StreamingStatus.STOPPED);
-            lastStopReason.set(StopReason.USER_STOP);
-            ffmpegProcess.destroy();
-            log.info("사용자 요청으로 방송 중지");
-        } else {
-            log.info("이미 종료된 방송입니다");
-        }
+        stopProcessAndCleanup("사용자 요청으로 방송 중지");
+        lastStopReason.set(StopReason.USER_STOP);
+        streamingStatus.set(StreamingStatus.STOPPED);
     }
 
     public StreamingStatus getStreamingStatus() {
@@ -380,16 +380,44 @@ public class FfmpegService {
 
     @PreDestroy
     public void destroy() {
-        if (ffmpegProcess != null && ffmpegProcess.isAlive()) {
-            log.info("서버 종료로 인한 FFmpeg 강제 회수 중...");
-            stopRequested.set(true);
-            ffmpegProcess.destroy();
+        stopProcessAndCleanup("서버 종료로 인한 FFmpeg 강제 회수 중");
+    }
+
+    private void stopProcessAndCleanup(String logMessage) {
+        if (ffmpegProcess == null || !ffmpegProcess.isAlive()) {
+            log.info("이미 종료된 방송입니다");
+            return;
+        }
+
+        log.info(logMessage);
+        stopRequested.set(true);
+
+        ffmpegProcess.destroy();
+        try {
+            if (!ffmpegProcess.waitFor(5, TimeUnit.SECONDS)) {
+                log.warn("FFmpeg 프로세스 강제 종료");
+                ffmpegProcess.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            cleanupCurrentWorkDir();
+        }
+    }
+
+    private void cleanupCurrentWorkDir() {
+        StreamingContext context = currentContext.get();
+        if (context == null || context.workDir() == null) {
+            return;
+        }
+
+        File workDir = context.workDir().toFile();
+        if (workDir.exists()) {
             try {
-                if (!ffmpegProcess.waitFor(5, TimeUnit.SECONDS)) {
-                    ffmpegProcess.destroyForcibly();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                FileSystemUtils.deleteRecursively(workDir);
+                log.info("HLS 디렉토리 정리 완료: {}", workDir.getAbsolutePath());
+            } catch (Exception e) {
+                log.warn("HLS 디렉토리 정리 실패: {}", workDir.getAbsolutePath(), e);
             }
         }
     }
