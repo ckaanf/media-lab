@@ -19,7 +19,6 @@ public class LiveController {
     public ResponseEntity<Void> publish(@RequestParam("name") String streamKey) {
         log.info("OBS 방송 수신 확인! StreamKey: {}", streamKey);
         ffmpegService.startStreaming(streamKey);
-
         return ResponseEntity.ok().build();
     }
 

@@ -1,6 +1,8 @@
 package ckaanf.controlplane.vod.service;
 
 import ckaanf.controlplane.streaming.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.service.FfmpegExecutor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
@@ -8,12 +10,15 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.List;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class VodService {
 
     private static final String VOD_STORAGE_BASE_PATH = "/app/videos/";
+    private final FfmpegExecutor ffmpegExecutor;
 
     @Async
     @EventListener
@@ -66,7 +71,7 @@ public class VodService {
     }
 
     private void convertToMp4(Path sourceM3u8, Path targetFile) throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder(
+        List<String> command = List.of(
                 "ffmpeg",
                 "-protocol_whitelist", "file,crypto,tcp,udp",
                 "-i", sourceM3u8.toString(),
@@ -75,8 +80,8 @@ public class VodService {
                 "-y",
                 targetFile.toString()
         );
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
+
+        Process process = ffmpegExecutor.startProcess(command);
 
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
             String line;
