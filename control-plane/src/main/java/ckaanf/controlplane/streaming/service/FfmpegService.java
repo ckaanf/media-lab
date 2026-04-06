@@ -231,22 +231,26 @@ public class FfmpegService {
     private List<String> buildStreamingCommand(String streamKey, Path workDir) {
         String inputUrl = "rtmp://rtmp-server:1935/live/" + streamKey;
         List<String> command = new ArrayList<>();
+
         command.add("ffmpeg");
-        command.add("-rw_timeout");
-        command.add("5000000");
-        command.add("-i");
-        command.add(inputUrl);
-        command.add("-map");
-        command.add("0:v");
-        command.add("-map");
-        command.add("0:a");
+        command.add("-rw_timeout"); command.add("5000000");
+        command.add("-i"); command.add(inputUrl);
+
         command.addAll(List.of(
                 "-c:v", "libx264", "-profile:v", "main", "-preset", "veryfast",
                 "-b:v", "5000k", "-maxrate", "5000k", "-bufsize", "10000k",
                 "-pix_fmt", "yuv420p", "-g", "60", "-sc_threshold", "0",
-                "-c:a", "aac", "-b:a", "128k", "-f", "hls", "-hls_time", "4",
-                "-hls_list_size", "6", "-hls_flags", "delete_segments",
-                workDir.resolve("index.m3u8").toString()
+                "-c:a", "aac", "-b:a", "128k",
+
+                // ★ 개선: 비디오(0:v)와 오디오(0:a)를 잡아와서 tee muxer로 던집니다.
+                "-map", "0:v", "-map", "0:a",
+                "-f", "tee",
+
+                // 파이프 1: HLS 라이브 (지워짐) | 파이프 2: TS 녹화 (계속 쌓임)
+                String.format("[f=hls:hls_time=4:hls_list_size=6:hls_flags=delete_segments]%s|[f=mpegts]%s",
+                        workDir.resolve("index.m3u8").toString(),
+                        workDir.resolve("record_full.ts").toString()
+                )
         ));
         return command;
     }

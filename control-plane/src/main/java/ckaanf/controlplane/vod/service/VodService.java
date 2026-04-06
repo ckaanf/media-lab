@@ -31,10 +31,10 @@ public class VodService {
                 : event.fileName();
 
         try {
-            Path sourceM3u8 = sourceBaseDir.resolve("index.m3u8");
+            Path recordFile = sourceBaseDir.resolve("record_full.ts");
             
-            if (!Files.exists(sourceM3u8)) {
-                log.warn("m3u8 파일을 찾을 수 없습니다: {}", sourceM3u8);
+            if (!Files.exists(recordFile)) {
+                log.warn("녹화 파일을 찾을 수 없습니다: {}", recordFile);
                 return;
             }
 
@@ -44,7 +44,7 @@ public class VodService {
 
             try {
                 Files.createDirectories(targetDir);
-                convertToMp4(sourceM3u8, targetFile);
+                convertToMp4(recordFile, targetFile);
                 log.info("[VOD 자산화 완료] 경로: {}", targetFile);
             } catch (IOException | InterruptedException e) {
                 log.error("[VOD 자산화 실패] Stream ID: {}", event.streamId(), e);
