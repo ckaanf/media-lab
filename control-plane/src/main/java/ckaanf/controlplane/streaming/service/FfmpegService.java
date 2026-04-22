@@ -34,7 +34,7 @@ public class FfmpegService {
 
     public void startStreaming(String streamKey) {
         sessionManager.setStopRequested(false);
-        sessionManager.setStatus(StreamingStatus.IDLE);
+        sessionManager.setStatus(StreamingStatus.INIT);
 
         CompletableFuture.runAsync(() -> {
             if (!waitForStreamReady(streamKey)) {
@@ -193,7 +193,7 @@ public class FfmpegService {
                 log.info("방송이 정상적으로 종료되었습니다.");
                 sessionManager.setStopReason(StopReason.PROCESS_EXIT);
             }
-            sessionManager.setStatus(StreamingStatus.IDLE);
+            sessionManager.setStatus(StreamingStatus.STOPPED);
 
             String streamId = "stream-" + sessionId;
             eventPublisher.publishEvent(new StreamEndedEvent(
@@ -257,11 +257,6 @@ public class FfmpegService {
 
     public StreamingStatus getStreamingStatus() {
         return sessionManager.getStatus();
-    }
-
-    public double getCurrentEncodingSpeed() {
-        Double speed = sessionManager.getEncodingSpeed();
-        return speed != null ? speed : 0.0;
     }
 
     public StopReason getLastStopReason() {
