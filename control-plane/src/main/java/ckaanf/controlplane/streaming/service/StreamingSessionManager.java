@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class StreamingSessionManager {
     private final AtomicReference<Long> sessionSequence = new AtomicReference<>(0L);
     private final AtomicReference<Long> activeSessionId = new AtomicReference<>(0L);
-    private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.IDLE);
+    private final AtomicReference<StreamingStatus> streamingStatus = new AtomicReference<>(StreamingStatus.INIT);
     private final AtomicReference<StopReason> lastStopReason = new AtomicReference<>(StopReason.NONE);
     private final AtomicReference<Boolean> stopRequested = new AtomicReference<>(false);
     private final AtomicReference<Double> currentEncodingSpeed = new AtomicReference<>(null);

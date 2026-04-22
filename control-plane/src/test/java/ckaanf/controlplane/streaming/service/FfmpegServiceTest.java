@@ -16,10 +16,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -65,7 +63,7 @@ class FfmpegServiceTest {
 
         when(mockProcess.getInputStream()).thenReturn(new ByteArrayInputStream("test log".getBytes()));
         when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
-        
+
         when(hlsManager.createDirectory(any())).thenAnswer(inv -> inv.getArgument(0));
         when(hlsManager.createTempDirectory(anyString())).thenReturn(Path.of("/tmp/hls-temp"));
     }
@@ -138,7 +136,7 @@ class FfmpegServiceTest {
         // given
         when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         when(mockProcess.isAlive()).thenReturn(true, false);
-        
+
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
@@ -152,7 +150,7 @@ class FfmpegServiceTest {
     }
 
     @Test
-    @DisplayName("프로세스가 정상 종료(0)되면 상태가 IDLE로 변경되어야 함")
+    @DisplayName("프로세스가 정상 종료(0)되면 상태가 STOPPED 변경되어야 함")
     void onExit_Success() throws IOException {
         // given
         CompletableFuture<Process> exitFuture = new CompletableFuture<>();
@@ -167,7 +165,7 @@ class FfmpegServiceTest {
         exitFuture.complete(mockProcess);
 
         // then
-        assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.IDLE);
+        assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STOPPED);
     }
 
     @Test
