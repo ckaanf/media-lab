@@ -1,6 +1,8 @@
 package ckaanf.controlplane.vod.service;
 
 import ckaanf.controlplane.streaming.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.service.FfmpegExecutor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
@@ -8,12 +10,15 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.List;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class VodService {
 
     private static final String VOD_STORAGE_BASE_PATH = "/app/videos/";
+    private final FfmpegExecutor ffmpegExecutor;
 
     @Async
     @EventListener
@@ -26,10 +31,10 @@ public class VodService {
                 : event.fileName();
 
         try {
-            Path sourceM3u8 = sourceBaseDir.resolve("index.m3u8");
+            Path recordFile = sourceBaseDir.resolve("record_full.ts");
             
-            if (!Files.exists(sourceM3u8)) {
-                log.warn("m3u8 파일을 찾을 수 없습니다: {}", sourceM3u8);
+            if (!Files.exists(recordFile)) {
+                log.warn("녹화 파일을 찾을 수 없습니다: {}", recordFile);
                 return;
             }
 
@@ -39,7 +44,7 @@ public class VodService {
 
             try {
                 Files.createDirectories(targetDir);
-                convertToMp4(sourceM3u8, targetFile);
+                convertToMp4(recordFile, targetFile);
                 log.info("[VOD 자산화 완료] 경로: {}", targetFile);
             } catch (IOException | InterruptedException e) {
                 log.error("[VOD 자산화 실패] Stream ID: {}", event.streamId(), e);
@@ -66,7 +71,7 @@ public class VodService {
     }
 
     private void convertToMp4(Path sourceM3u8, Path targetFile) throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder(
+        List<String> command = List.of(
                 "ffmpeg",
                 "-protocol_whitelist", "file,crypto,tcp,udp",
                 "-i", sourceM3u8.toString(),
@@ -75,8 +80,8 @@ public class VodService {
                 "-y",
                 targetFile.toString()
         );
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
+
+        Process process = ffmpegExecutor.startProcess(command);
 
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
             String line;

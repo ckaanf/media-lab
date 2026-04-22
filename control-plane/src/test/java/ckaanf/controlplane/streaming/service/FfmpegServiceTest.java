@@ -3,21 +3,23 @@ package ckaanf.controlplane.streaming.service;
 import ckaanf.controlplane.streaming.constant.StopReason;
 import ckaanf.controlplane.streaming.constant.StreamingStatus;
 import ckaanf.controlplane.streaming.response.StreamingInfo;
-import ckaanf.controlplane.streaming.service.FfmpegService;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.util.FileSystemUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -26,17 +28,34 @@ import static org.mockito.Mockito.*;
 
 class FfmpegServiceTest {
 
+    @InjectMocks
     private FfmpegService ffmpegService;
-    private Process mockProcess;
+
+    @Mock
+    private FfmpegExecutor ffmpegExecutor;
+
+    @Spy
+    private StreamingSessionManager sessionManager = new StreamingSessionManager();
+
+    @Mock
+    private HlsDirectoryManager hlsManager;
+
+    @Mock
+    private FfmpegLogMonitor logMonitor;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private ThreadPoolTaskExecutor mediaTaskExecutor;
 
+    private Process mockProcess;
+
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
+        MockitoAnnotations.openMocks(this);
         mockProcess = mock(Process.class);
-        eventPublisher = mock(ApplicationEventPublisher.class);
-        mediaTaskExecutor = mock(ThreadPoolTaskExecutor.class);
-        
+
         // CompletableFuture.runAsync(..., executor) 내부에서 executor.execute()를 호출하므로 모킹 필요
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(0);
@@ -44,17 +63,18 @@ class FfmpegServiceTest {
             return null;
         }).when(mediaTaskExecutor).execute(any(Runnable.class));
 
-        ffmpegService = spy(new FfmpegService(eventPublisher, mediaTaskExecutor));
-        
         when(mockProcess.getInputStream()).thenReturn(new ByteArrayInputStream("test log".getBytes()));
         when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
+        
+        when(hlsManager.createDirectory(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(hlsManager.createTempDirectory(anyString())).thenReturn(Path.of("/tmp/hls-temp"));
     }
 
     @Test
     @DisplayName("RTMP 스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
     void executeStreamingFfmpeg_Success() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
 
         // when
         ffmpegService.executeStreamingFfmpeg("test-stream");
@@ -62,14 +82,14 @@ class FfmpegServiceTest {
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
         assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.NONE);
-        verify(ffmpegService, times(1)).startProcess(any());
+        verify(ffmpegExecutor, times(1)).startProcess(any());
     }
 
     @Test
     @DisplayName("파일 기반 스트리밍 시작 시 상태가 STREAMING으로 변경되어야 함")
     void executeFileFfmpeg_Success() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
 
         // when
         ffmpegService.executeFileFfmpeg("sample.mp4");
@@ -77,14 +97,14 @@ class FfmpegServiceTest {
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
         assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.NONE);
-        verify(ffmpegService, times(1)).startProcess(any());
+        verify(ffmpegExecutor, times(1)).startProcess(any());
     }
 
     @Test
     @DisplayName("이미 스트리밍 중일 때 다시 시작하면 추가 프로세스가 실행되지 않아야 함")
     void executeFfmpeg_AlreadyStreaming() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         ffmpegService.executeStreamingFfmpeg("test-stream");
 
         // when
@@ -92,14 +112,14 @@ class FfmpegServiceTest {
 
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
-        verify(ffmpegService, times(1)).startProcess(any());
+        verify(ffmpegExecutor, times(1)).startProcess(any());
     }
 
     @Test
     @DisplayName("스트리밍 중지 시 프로세스가 종료되어야 함")
     void stopStreaming_Success() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         when(mockProcess.isAlive()).thenReturn(true);
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
@@ -109,17 +129,16 @@ class FfmpegServiceTest {
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STOPPED);
         assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.USER_STOP);
-        verify(mockProcess, times(1)).destroy();
+        verify(ffmpegExecutor, times(1)).stopProcess(eq(mockProcess), anyLong());
     }
 
     @Test
     @DisplayName("이미 종료된 방송에 stop이 다시 들어오면 destroy가 추가 호출되지 않아야 함")
     void stopStreaming_When_AlreadyStopped() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         when(mockProcess.isAlive()).thenReturn(true, false);
-        when(mockProcess.onExit()).thenReturn(new CompletableFuture<>());
-
+        
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
@@ -129,7 +148,7 @@ class FfmpegServiceTest {
         // then
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STOPPED);
         assertThat(ffmpegService.getLastStopReason()).isEqualTo(StopReason.USER_STOP);
-        verify(mockProcess, times(1)).destroy();
+        verify(ffmpegExecutor, times(1)).stopProcess(eq(mockProcess), anyLong());
     }
 
     @Test
@@ -139,7 +158,7 @@ class FfmpegServiceTest {
         CompletableFuture<Process> exitFuture = new CompletableFuture<>();
         when(mockProcess.onExit()).thenReturn(exitFuture);
         when(mockProcess.exitValue()).thenReturn(0);
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
 
         ffmpegService.executeStreamingFfmpeg("test.mp4");
         assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STREAMING);
@@ -158,7 +177,7 @@ class FfmpegServiceTest {
         CompletableFuture<Process> exitFuture = new CompletableFuture<>();
         when(mockProcess.onExit()).thenReturn(exitFuture);
         when(mockProcess.exitValue()).thenReturn(1);
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
 
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
@@ -173,44 +192,23 @@ class FfmpegServiceTest {
     }
 
     @Test
-    @DisplayName("로그에서 인코딩 속도를 정상적으로 파싱해야 함")
-    void readLogs_EncodingSpeed_Parsing() throws IOException {
+    @DisplayName("로그 모니터가 정상적으로 호출되어야 함")
+    void logMonitor_ShouldBeCalled() throws IOException {
         // given
-        String logs = "frame=  100 fps= 30 q=28.0 size=     512kB time=00:00:03.33 bitrate=1258.3kbits/s speed= 1.50x\n";
-        when(mockProcess.getInputStream()).thenReturn(new ByteArrayInputStream(logs.getBytes()));
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
 
         // when
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // then
-        await().atMost(2, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(ffmpegService.getCurrentEncodingSpeed()).isEqualTo(1.50);
-        });
-    }
-
-    @Test
-    @DisplayName("인코딩 속도가 1.0 미만일 때 경고 로직이 동작해야 함 (부하 감지)")
-    void readLogs_LowSpeed_Warning() throws IOException {
-        // given
-        String logs = "frame=  200 fps= 20 q=28.0 size=    1024kB time=00:00:06.66 bitrate=1258.3kbits/s speed=0.85x\n";
-        when(mockProcess.getInputStream()).thenReturn(new ByteArrayInputStream(logs.getBytes()));
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
-
-        // when
-        ffmpegService.executeStreamingFfmpeg("test.mp4");
-
-        // then
-        await().atMost(2, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(ffmpegService.getCurrentEncodingSpeed()).isEqualTo(0.85);
-        });
+        verify(logMonitor, times(1)).monitor(eq(mockProcess), anyLong());
     }
 
     @Test
     @DisplayName("getStreamingInfo는 현재 상태와 마지막 중지 사유를 포함해야 함")
     void getStreamingInfo_ShouldReturnCorrectInfo() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
@@ -223,41 +221,16 @@ class FfmpegServiceTest {
 
     @Test
     @DisplayName("destroy 호출 시 실행 중인 프로세스가 종료되어야 함 (@PreDestroy)")
-    void destroy_ShouldStopProcess() throws IOException, InterruptedException {
+    void destroy_ShouldStopProcess() throws IOException {
         // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
+        when(ffmpegExecutor.startProcess(any())).thenReturn(mockProcess);
         when(mockProcess.isAlive()).thenReturn(true);
-        when(mockProcess.waitFor(anyLong(), any())).thenReturn(true);
         ffmpegService.executeStreamingFfmpeg("test.mp4");
 
         // when
         ffmpegService.destroy();
 
         // then
-        verify(mockProcess, times(1)).destroy();
-    }
-
-    @Test
-    @DisplayName("스트리밍 종료 시 작업 디렉토리가 삭제되어야 함")
-    void stopStreaming_ShouldCleanupWorkDir() throws IOException {
-        // given
-        doReturn(mockProcess).when(ffmpegService).startProcess(any());
-        when(mockProcess.isAlive()).thenReturn(true);
-
-        // 파일 스트리밍을 시작하여 임시 디렉토리가 생성되게 함
-        ffmpegService.executeFileFfmpeg("sample.mp4");
-        
-        // 생성된 임시 디렉토리 경로 확인 (FfmpegService 내부 currentContext 활용)
-        // 직접 private 필드에 접근하기 어려우므로, 
-        // /tmp/hls-file-* 형식의 디렉토리가 생성되었는지 확인하거나 
-        // getStreamingInfo() 등을 확장해서 확인해야 하지만, 
-        // 여기서는 stopStreaming 후 상태가 STOPPED로 변경되는 것과 destroy가 호출되는 것 위주로 검증
-        
-        // when
-        ffmpegService.stopStreaming();
-
-        // then
-        assertThat(ffmpegService.getStreamingStatus()).isEqualTo(StreamingStatus.STOPPED);
-        verify(mockProcess, times(1)).destroy();
+        verify(ffmpegExecutor, times(1)).stopProcess(eq(mockProcess), anyLong());
     }
 }

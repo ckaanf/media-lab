@@ -1,10 +1,13 @@
 package ckaanf.controlplane.vod.service;
 
 import ckaanf.controlplane.streaming.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.service.FfmpegExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,12 +19,16 @@ class VodServiceTest {
 
     private VodService vodService;
 
+    @Mock
+    private FfmpegExecutor ffmpegExecutor;
+
     @TempDir
     Path tempDir;
 
     @BeforeEach
     void setUp() {
-        vodService = new VodService();
+        MockitoAnnotations.openMocks(this);
+        vodService = new VodService(ffmpegExecutor);
     }
 
     @Test
