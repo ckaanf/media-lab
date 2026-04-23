@@ -1,7 +1,7 @@
-package ckaanf.controlplane.streaming.controller;
+package ckaanf.controlplane.streaming.live.controller;
 
-import ckaanf.controlplane.streaming.response.StreamingInfo;
-import ckaanf.controlplane.streaming.service.FfmpegService;
+import ckaanf.controlplane.streaming.live.dto.response.StreamingInfo;
+import ckaanf.controlplane.streaming.live.service.FfmpegService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;

@@ -1,6 +1,6 @@
-package ckaanf.controlplane.streaming.vo;
+package ckaanf.controlplane.streaming.live.domain.vo;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;

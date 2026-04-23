@@ -1,10 +1,10 @@
-package ckaanf.controlplane.streaming.entity;
+package ckaanf.controlplane.streaming.live.domain.entity;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
-import ckaanf.controlplane.streaming.constant.StreamingStatus;
-import ckaanf.controlplane.streaming.vo.StreamingProcess;
-import ckaanf.controlplane.streaming.vo.StreamingResult;
-import ckaanf.controlplane.streaming.vo.StreamingTimeline;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.live.domain.vo.StreamingProcess;
+import ckaanf.controlplane.streaming.live.domain.vo.StreamingResult;
+import ckaanf.controlplane.streaming.live.domain.vo.StreamingTimeline;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;

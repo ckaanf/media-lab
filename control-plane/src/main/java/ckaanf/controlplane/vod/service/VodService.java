@@ -1,7 +1,7 @@
 package ckaanf.controlplane.vod.service;
 
-import ckaanf.controlplane.streaming.event.StreamEndedEvent;
-import ckaanf.controlplane.streaming.service.FfmpegExecutor;
+import ckaanf.controlplane.streaming.common.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.live.service.FfmpegExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
