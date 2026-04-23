@@ -1,7 +1,7 @@
 package ckaanf.controlplane.vod.service;
 
-import ckaanf.controlplane.streaming.event.StreamEndedEvent;
-import ckaanf.controlplane.streaming.service.FfmpegExecutor;
+import ckaanf.controlplane.streaming.common.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.live.service.FfmpegExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

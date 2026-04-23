@@ -1,5 +1,7 @@
 package ckaanf.controlplane.streaming.constant;
 
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.common.exception.StreamingDomainException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -25,8 +27,7 @@ class StreamingStatusTest {
 
         // when & then (STREAMING에서 다시 STARTING으로 갈 수 없음)
         assertThatThrownBy(() -> currentStatus.canTransitionTo(StreamingStatus.STARTING))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("잘못된 세션 상태 전이");
+                .isInstanceOf(StreamingDomainException.class);
     }
 
     @Test
@@ -37,7 +38,7 @@ class StreamingStatusTest {
         assertThat(StreamingStatus.ERROR.allowNext()).isEmpty();
 
         assertThatThrownBy(() -> StreamingStatus.STOPPED.canTransitionTo(StreamingStatus.INIT))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(StreamingDomainException.class);
     }
 
 }
