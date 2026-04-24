@@ -1,4 +1,4 @@
-package ckaanf.controlplane.streaming.constant;
+package ckaanf.controlplane.streaming.live.domain.constant;
 
 public enum StopReason {
     NONE,

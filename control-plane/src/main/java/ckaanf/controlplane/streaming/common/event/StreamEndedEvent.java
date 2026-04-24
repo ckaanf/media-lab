@@ -1,4 +1,4 @@
-package ckaanf.controlplane.streaming.event;
+package ckaanf.controlplane.streaming.common.event;
 
 public record StreamEndedEvent(
         Long sessionId,

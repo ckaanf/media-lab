@@ -1,5 +1,6 @@
 package ckaanf.controlplane.streaming.vo;
 
+import ckaanf.controlplane.streaming.live.domain.vo.StreamingTimeline;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

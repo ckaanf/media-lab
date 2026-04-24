@@ -1,4 +1,7 @@
-package ckaanf.controlplane.streaming.constant;
+package ckaanf.controlplane.streaming.live.domain.constant;
+
+import ckaanf.controlplane.streaming.common.exception.StreamingDomainException;
+import ckaanf.controlplane.streaming.common.exception.StreamingErrorCode;
 
 import java.util.Set;
 
@@ -49,7 +52,9 @@ public enum StreamingStatus {
 
     public void canTransitionTo(StreamingStatus next) {
         if (!allowNext().contains(next)) {
-            throw new IllegalStateException("잘못된 세션 상태 전이");
+            throw new StreamingDomainException(
+                    StreamingErrorCode.INVALID_STATUS_TRANSITION, this.name(), next.name()
+            );
         }
     }
 }

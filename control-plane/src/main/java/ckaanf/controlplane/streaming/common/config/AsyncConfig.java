@@ -1,4 +1,4 @@
-package ckaanf.controlplane.streaming.config;
+package ckaanf.controlplane.streaming.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

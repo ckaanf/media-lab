@@ -1,9 +1,9 @@
-package ckaanf.controlplane.streaming.service;
+package ckaanf.controlplane.streaming.live.service;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
-import ckaanf.controlplane.streaming.constant.StreamingStatus;
-import ckaanf.controlplane.streaming.event.StreamEndedEvent;
-import ckaanf.controlplane.streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.common.event.StreamEndedEvent;
+import ckaanf.controlplane.streaming.live.dto.response.StreamingInfo;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

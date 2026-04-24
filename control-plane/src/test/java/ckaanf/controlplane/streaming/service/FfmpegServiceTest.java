@@ -1,8 +1,9 @@
 package ckaanf.controlplane.streaming.service;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
-import ckaanf.controlplane.streaming.constant.StreamingStatus;
-import ckaanf.controlplane.streaming.response.StreamingInfo;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.live.dto.response.StreamingInfo;
+import ckaanf.controlplane.streaming.live.service.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

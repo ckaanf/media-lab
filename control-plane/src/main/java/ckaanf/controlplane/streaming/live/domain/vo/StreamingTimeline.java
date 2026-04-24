@@ -1,4 +1,4 @@
-package ckaanf.controlplane.streaming.vo;
+package ckaanf.controlplane.streaming.live.domain.vo;
 
 import jakarta.persistence.Embeddable;
 import lombok.AccessLevel;

@@ -1,7 +1,9 @@
 package ckaanf.controlplane.streaming.entity;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
-import ckaanf.controlplane.streaming.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.common.exception.StreamingDomainException;
+import ckaanf.controlplane.streaming.live.domain.entity.StreamingSession;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -81,7 +83,7 @@ class StreamingSessionTest {
         StreamingSession session = createInitSession();
 
         // when & then
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, session::connect);
+        org.junit.jupiter.api.Assertions.assertThrows(StreamingDomainException.class, session::connect);
     }
 
     private StreamingSession createInitSession() {

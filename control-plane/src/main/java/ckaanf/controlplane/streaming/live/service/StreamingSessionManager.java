@@ -1,7 +1,7 @@
-package ckaanf.controlplane.streaming.service;
+package ckaanf.controlplane.streaming.live.service;
 
-import ckaanf.controlplane.streaming.constant.StopReason;
-import ckaanf.controlplane.streaming.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
+import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
 import lombok.Getter;
 import org.springframework.stereotype.Component;
 
