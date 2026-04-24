@@ -18,7 +18,7 @@ class StreamingSessionTest {
         StreamingSession session = createInitSession();
 
         // when
-        session.start(12345L);
+        session.start(12345L, "command");
 
         // then
         assertThat(session.getStatus()).isEqualTo(StreamingStatus.STARTING);
@@ -31,7 +31,7 @@ class StreamingSessionTest {
     void session_Connect_Success() {
         // given
         StreamingSession session = createInitSession();
-        session.start(12345L);
+        session.start(12345L, "command");
 
         // when
         session.connect();
@@ -46,7 +46,7 @@ class StreamingSessionTest {
     void session_Stop_Success() {
         // given
         StreamingSession session = createInitSession();
-        session.start(12345L);
+        session.start(12345L, "command");
         session.connect();
 
         // when
@@ -64,7 +64,7 @@ class StreamingSessionTest {
     void session_Fail_Success() {
         // given
         StreamingSession session = createInitSession();
-        session.start(12345L);
+        session.start(12345L, "command");
 
         // when
         session.fail(StopReason.PROCESS_EXIT, "ffmpeg exit with error");

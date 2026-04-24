@@ -1,9 +1,13 @@
 package ckaanf.controlplane.streaming.live.domain.entity;
 
+import ckaanf.controlplane.streaming.common.exception.StreamingDomainException;
+import ckaanf.controlplane.streaming.common.exception.StreamingErrorCode;
 import ckaanf.controlplane.streaming.live.domain.constant.StopReason;
 import ckaanf.controlplane.streaming.live.domain.constant.StreamingStatus;
+import ckaanf.controlplane.streaming.live.domain.service.ProcessChecker;
 import ckaanf.controlplane.streaming.live.domain.vo.StreamingProcess;
 import ckaanf.controlplane.streaming.live.domain.vo.StreamingResult;
+import ckaanf.controlplane.streaming.live.domain.vo.StreamingTask;
 import ckaanf.controlplane.streaming.live.domain.vo.StreamingTimeline;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -27,6 +31,9 @@ public class StreamingSession {
     private StreamingStatus status;
 
     @Embedded
+    private StreamingTask task;
+
+    @Embedded
     private StreamingProcess process;
 
     @Embedded
@@ -37,20 +44,29 @@ public class StreamingSession {
 
 
     @Builder
-    public StreamingSession(String streamKey, Long pid, String inputUrl, String outputPath) {
+    public StreamingSession(String streamKey, Long pid, String inputUrl, String outputPath, String resolution,
+                            Integer bitrate) {
         this.streamKey = streamKey;
         this.status = StreamingStatus.INIT;
 
-        this.process = StreamingProcess.init(inputUrl, outputPath);
+        this.task = StreamingTask.builder()
+                .inputUrl(inputUrl)
+                .outputPath(outputPath)
+                .resolution(resolution)
+                .bitrate(bitrate)
+                .build();
+
+        this.process = StreamingProcess.empty();
         this.lifecycle = StreamingTimeline.init();
         this.result = StreamingResult.empty();
     }
 
 
-    public void start(Long pid) {
+    public void start(Long pid, String ffmpegCommand) {
         this.status.canTransitionTo(StreamingStatus.STARTING);
         this.status = StreamingStatus.STARTING;
-        this.process = this.process.withPid(pid);
+
+        this.process = StreamingProcess.start(pid, ffmpegCommand);
         this.lifecycle = this.lifecycle.withStarted();
     }
 
@@ -77,5 +93,16 @@ public class StreamingSession {
         this.result = StreamingResult.of(reason, message);
     }
 
+    public void validateProcessState(ProcessChecker checker) {
+        if (this.status == StreamingStatus.STREAMING) {
+            if (this.process == null || !checker.isAlive(this.process.getPid())) {
+                this.status = StreamingStatus.FAILED;
+                throw new StreamingDomainException(
+                        StreamingErrorCode.PROCESS_ORPHANED,
+                        this.process != null ? this.process.getPid() : "N/A"
+                );
+            }
+        }
+    }
 
 }

@@ -1,35 +1,49 @@
 package ckaanf.controlplane.streaming.live.domain.vo;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 @Embeddable
 @Getter
 @NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
+@EqualsAndHashCode
 public class StreamingProcess {
     private Long pid;
+    private LocalDateTime startedAt;
 
-    private String inputUrl;
-    private String outputPath;
+    @Column(columnDefinition = "TEXT")
+    private String ffmpegCommand;
 
-    private StreamingProcess(Long pid, String inputUrl, String outputPath) {
+    private StreamingProcess(Long pid, LocalDateTime startedAt, String ffmpegCommand) {
         this.pid = pid;
-        this.inputUrl = inputUrl;
-        this.outputPath = outputPath;
+        this.startedAt = startedAt;
+        this.ffmpegCommand = ffmpegCommand;
     }
 
-    // 초기 생성 시 PID 없음
-    public static StreamingProcess init(String inputUrl, String outputPath) {
-        return new StreamingProcess(null, inputUrl, outputPath);
+
+    public static StreamingProcess init(Long pid, LocalDateTime startedAt, String ffmpegCommand) {
+        return new StreamingProcess(pid, startedAt, ffmpegCommand);
+    }
+
+    public static StreamingProcess empty() {
+        return new StreamingProcess(null, null, null);
+    }
+
+    public static StreamingProcess start(Long pid, String ffmpegCommand) {
+        return new StreamingProcess(pid, LocalDateTime.now(), ffmpegCommand);
     }
 
     public StreamingProcess withPid(Long pid) {
-        return new StreamingProcess(pid, this.inputUrl, this.outputPath);
+        return new StreamingProcess(pid, this.startedAt, this.ffmpegCommand);
     }
 
     public StreamingProcess clearPid() {
-        return new StreamingProcess(null, this.inputUrl, this.outputPath);
+        return new StreamingProcess(null, this.startedAt, this.ffmpegCommand);
     }
 
     public boolean isRunning() {
